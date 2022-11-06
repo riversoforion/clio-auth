@@ -99,7 +99,7 @@ where
                 addr: socket_addr.ip(),
                 port_range: socket_addr.port()..socket_addr.port(),
             }),
-            None => find_available_port(self.ip_address.clone(), self.port_range.clone()),
+            None => find_available_port(self.ip_address, self.port_range.clone()),
         }
     }
 
@@ -134,9 +134,11 @@ where
     }
 
     pub fn build(self) -> ConfigResult<CliOAuth<TE, TR, TT, TIR, RT, TRE>> {
+        self.validate()?;
+        let socket_addr = self.resolve_address()?;
         Ok(CliOAuth {
             _oauth_client: self.oauth_client,
-            _address: self.socket_address.unwrap(),
+            _address: socket_addr,
         })
     }
 }
@@ -199,27 +201,6 @@ mod tests {
         (start, end)
     }
 
-    #[test]
-    #[ignore]
-    fn socket_harness() {
-        let (port_start, port_end) = next_ports(6);
-        let _s1 = TcpListener::bind(SocketAddr::new(LOCALHOST, port_start + 1));
-        let _s2 = TcpListener::bind(SocketAddr::new(LOCALHOST, port_start + 3));
-        for port in port_start..port_end {
-            let addr = SocketAddr::new(LOCALHOST, port);
-            if is_address_available(addr) {
-                print!("Port :{port} is available...  ");
-            } else {
-                eprint!("Port :{port} NOT available... ");
-            }
-            match TcpListener::bind(addr) {
-                Ok(_) => println!("Socket acquired on :{port}"),
-                Err(e) => eprintln!("Socket failed on :{port} : {:?}", e),
-            }
-            println!();
-        }
-    }
-
     #[rstest]
     fn find_available_port_with_open_port() {
         let (port_start, port_end) = next_ports(3);
@@ -259,7 +240,7 @@ mod tests {
     }
 
     mod builder {
-        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
         use std::str::FromStr;
 
         use oauth2::basic::BasicClient;
@@ -378,6 +359,42 @@ mod tests {
             let resolved_address = builder.resolve_address().unwrap();
             assert_eq!(resolved_address.port(), port);
             assert_eq!(resolved_address.ip(), LOCALHOST);
+        }
+
+        #[rstest]
+        fn build_valid_struct(oauth_client: BasicClient) {
+            let (port, _) = next_ports(1);
+            let builder = CliOAuthBuilder::new(oauth_client).port(port);
+            let res = builder.build();
+            let auth = res.expect("valid struct should be built");
+            let built_addr = auth._address;
+            assert_eq!(built_addr, SocketAddr::new(LOCALHOST, port));
+        }
+
+        #[rstest]
+        fn build_struct_with_invalid_ports(oauth_client: BasicClient) {
+            let port = 26;
+            let builder = CliOAuthBuilder::new(oauth_client).port(port);
+            let res = builder.build();
+            let error = res.expect_err("error should be returned");
+            assert_eq!(
+                format!("{error}"),
+                format!("invalid server config (expected port >= 1024, found {port})")
+            );
+        }
+
+        #[rstest]
+        fn build_struct_with_unavailable_ports(oauth_client: BasicClient) {
+            let (test_port, open_port) = next_ports(1);
+            let _socket = TcpListener::bind(SocketAddr::new(LOCALHOST, open_port))
+                .expect("port is already open");
+            let builder = CliOAuthBuilder::new(oauth_client).port(test_port);
+            let res = builder.build();
+            let error = res.expect_err("error should be returned");
+            assert_eq!(
+                format!("{error}"),
+                format!("cannot bind to 127.0.0.1 on any port from {test_port}-{test_port}")
+            );
         }
     }
 }
