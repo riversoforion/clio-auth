@@ -1,3 +1,25 @@
+//! OAuth 2.0 helper for CLI and desktop applications.
+//!
+//! Facilitates the [OAuth 2.0 Authorization Code with PKCE][1] flow. This package works
+//! hand-in-hand with the [oauth2][2] crate.
+//!
+//! # Usage
+//!
+//! General usage is as follows:
+//!
+//! 1. Configure an [`oauth2::Client`]
+//! 1. Configure a [`CliOAuthBuilder`]
+//! 1. Build and start the [`CliOAuth`]
+//! 1. Await the token result
+//!
+//! # Examples
+//!
+//! _TODO: Examples for creating the oauth2 client, configuring the builder, starting the server,
+//! and awaiting the token._
+//!
+//! [1]: https://www.rfc-editor.org/rfc/rfc7636
+//! [2]: https://crates.io/crates/oauth2
+
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
 use std::ops::Range;
 
@@ -9,8 +31,10 @@ use ConfigError::{CannotBindAddress, InvalidServerConfig};
 /// Defines the various types of errors that can occur during the OAuth flow.
 #[derive(Error, Debug)]
 pub enum ConfigError {
+    /// Indicates that the web server parameters were not correct.
     #[error("invalid server config (expected {expected}, found {found})")]
     InvalidServerConfig { expected: String, found: String },
+    /// Indicates that the configured address and port were not available to listen on.
     #[error("cannot bind to {addr} on any port from {}-{}", port_range.start, port_range.end - 1)]
     CannotBindAddress {
         addr: IpAddr,
@@ -18,7 +42,7 @@ pub enum ConfigError {
     },
 }
 
-/// A shortcut Result where the type of error is [`ConfigError`].
+/// A shortcut [`Result`] using an error of [`ConfigError`].
 pub type ConfigResult<T> = Result<T, ConfigError>;
 
 /// The CLI OAuth helper.
@@ -46,18 +70,20 @@ where
     TRE: ErrorResponse,
 {
     pub fn build(
-        oauth: oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
+        oauth_client: oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
     ) -> CliOAuthBuilder<TE, TR, TT, TIR, RT, TRE> {
-        CliOAuthBuilder::new(oauth)
+        CliOAuthBuilder::new(oauth_client)
     }
     pub async fn start(&self) {}
 }
 
 const PORT_MIN: u16 = 1024;
-const DEFAULT_PORT_MIN: u16 = 3000;
-const DEFAULT_PORT_MAX: u16 = 3010;
+const DEFAULT_PORT_MIN: u16 = 3456;
+const DEFAULT_PORT_MAX: u16 = DEFAULT_PORT_MIN + 10;
 
-/// A builder for [`ClioAuth`].
+/// A builder for [`CliOAuth`] structs.
+///
+/// Not constructed directly. See [`CliOAuth::build()`].
 #[derive(Debug)]
 pub struct CliOAuthBuilder<TE, TR, TT, TIR, RT, TRE>
 where
@@ -113,26 +139,44 @@ where
         Ok(())
     }
 
+    /// Configures a single port for the web server to attempt to bind to.
+    ///
+    /// For simplicity, must be a non-privileged port (greater that or equal to `1024`).
     pub fn port(mut self, port: u16) -> Self {
         self.port_range = port..(port + 1);
         self
     }
 
+    /// Configures a range of ports for the web server to attempt to bind to.
+    ///
+    /// When the `CliOAuth` instance is constructed, each of these ports will be tried in order. The
+    /// first open one will be used.
+    ///
+    /// The default range is `3456..3465`.
     pub fn port_range(mut self, ports: Range<u16>) -> Self {
         self.port_range = ports;
         self
     }
 
+    /// Configures the local IP address for the web server to listen on.
+    ///
+    /// Address must be configured for the system. The default is "localhost" (`127.0.0.1`), which
+    /// works fine in most cases.
     pub fn ip_address(mut self, ip_address: impl Into<IpAddr>) -> Self {
         self.ip_address = ip_address.into();
         self
     }
 
+    /// Configures a socket address (IP address and port) for the web server to listen on.
+    ///
+    /// If provided, it overrides the [`Self::ip_address()`], [`Self::port()`], and
+    /// [`Self::port_range()`] settings.
     pub fn socket_address(mut self, address: SocketAddr) -> Self {
         self.socket_address = Some(address);
         self
     }
 
+    /// Constructs the [`CliOAuth`] instance.
     pub fn build(self) -> ConfigResult<CliOAuth<TE, TR, TT, TIR, RT, TRE>> {
         self.validate()?;
         let socket_addr = self.resolve_address()?;
