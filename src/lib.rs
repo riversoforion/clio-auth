@@ -28,6 +28,8 @@ use thiserror::Error;
 
 use ConfigError::{CannotBindAddress, InvalidServerConfig};
 
+mod server;
+
 /// Defines the various types of errors that can occur during the OAuth flow.
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -57,7 +59,7 @@ where
     TRE: ErrorResponse,
 {
     _oauth_client: oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
-    _address: SocketAddr,
+    address: SocketAddr,
 }
 
 impl<TE, TR, TT, TIR, RT, TRE> CliOAuth<TE, TR, TT, TIR, RT, TRE>
@@ -74,7 +76,14 @@ where
     ) -> CliOAuthBuilder<TE, TR, TT, TIR, RT, TRE> {
         CliOAuthBuilder::new(oauth_client)
     }
-    pub async fn start(&self) {}
+
+    pub async fn start(&self) {
+        let _server = server::AuthServer::start(self.address).await;
+    }
+
+    pub async fn token(&self) -> Box<TR> {
+        todo!()
+    }
 }
 
 const PORT_MIN: u16 = 1024;
@@ -182,7 +191,7 @@ where
         let socket_addr = self.resolve_address()?;
         Ok(CliOAuth {
             _oauth_client: self.oauth_client,
-            _address: socket_addr,
+            address: socket_addr,
         })
     }
 }
@@ -411,7 +420,7 @@ mod tests {
             let builder = CliOAuthBuilder::new(oauth_client).port(port);
             let res = builder.build();
             let auth = res.expect("valid struct should be built");
-            let built_addr = auth._address;
+            let built_addr = auth.address;
             assert_eq!(built_addr, SocketAddr::new(LOCALHOST, port));
         }
 
