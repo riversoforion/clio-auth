@@ -26,9 +26,16 @@ use std::ops::Range;
 use oauth2::{ErrorResponse, RevocableToken, TokenIntrospectionResponse, TokenResponse, TokenType};
 use thiserror::Error;
 
+use crate::server::AuthServer;
 use ConfigError::{CannotBindAddress, InvalidServerConfig};
 
+pub use server::{ServerError, ServerResult};
+
 mod server;
+
+pub fn call_me() {
+    println!("Hello from the library");
+}
 
 /// Defines the various types of errors that can occur during the OAuth flow.
 #[derive(Error, Debug)]
@@ -58,8 +65,9 @@ where
     RT: RevocableToken,
     TRE: ErrorResponse,
 {
-    _oauth_client: oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
+    oauth_client: oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
     address: SocketAddr,
+    auth_server: Option<AuthServer>,
 }
 
 impl<TE, TR, TT, TIR, RT, TRE> CliOAuth<TE, TR, TT, TIR, RT, TRE>
@@ -71,17 +79,25 @@ where
     RT: RevocableToken,
     TRE: ErrorResponse,
 {
-    pub fn build(
+    pub fn builder(
         oauth_client: oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
     ) -> CliOAuthBuilder<TE, TR, TT, TIR, RT, TRE> {
         CliOAuthBuilder::new(oauth_client)
     }
 
-    pub async fn start(&self) {
-        let _server = server::AuthServer::start(self.address).await;
+    pub async fn start(&mut self) -> ServerResult<()> {
+        // Start the server
+        let auth_server = AuthServer::start(self.address).await?;
+        self.auth_server = Some(auth_server);
+        Ok(())
     }
 
     pub async fn token(&self) -> Box<TR> {
+        // Set the redirect URL on the OAuth client
+        // Generate the PKCE challenge
+        // Generate the authorization URL
+        // Open the system browser with the auth URL
+        // Wait for the token from the auth server
         todo!()
     }
 }
@@ -92,7 +108,7 @@ const DEFAULT_PORT_MAX: u16 = DEFAULT_PORT_MIN + 10;
 
 /// A builder for [`CliOAuth`] structs.
 ///
-/// Not constructed directly. See [`CliOAuth::build()`].
+/// Not constructed directly. See [`CliOAuth::builder()`].
 #[derive(Debug)]
 pub struct CliOAuthBuilder<TE, TR, TT, TIR, RT, TRE>
 where
@@ -190,8 +206,9 @@ where
         self.validate()?;
         let socket_addr = self.resolve_address()?;
         Ok(CliOAuth {
-            _oauth_client: self.oauth_client,
+            oauth_client: self.oauth_client,
             address: socket_addr,
+            auth_server: None,
         })
     }
 }
