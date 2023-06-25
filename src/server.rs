@@ -7,6 +7,7 @@ use crate::error::ServerError;
 use crate::AuthCodeHolder;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
+use log::{debug, error, info};
 use tokio::sync::mpsc;
 use tokio::time;
 
@@ -22,7 +23,7 @@ pub(crate) async fn launch(
     control_receiver: mpsc::Receiver<ServerControl>,
     timeout: u64,
 ) {
-    println!("🚀 launching http server...");
+    info!("🚀 launching http server...");
     // Create Hyper server
     let service_factory = make_service_fn(move |_| {
         let control_sender = control_sender.to_owned();
@@ -40,10 +41,10 @@ pub(crate) async fn launch(
     let server = Server::bind(&address).serve(service_factory);
     // Configure graceful shutdown
     let server = server.with_graceful_shutdown(shutdown_signal(control_receiver, timeout));
-    println!("🏃 server running at http://{}", address);
-    println!("⏳ waiting for {timeout} seconds");
+    info!("🏃 server running at http://{}", address);
+    debug!("⏳ waiting for {timeout} seconds");
     if let Err(e) = server.await {
-        eprintln!("⚠️ server error: {}", e);
+        error!("⚠️ server error: {}", e);
     }
 }
 
@@ -55,14 +56,14 @@ async fn handle_request(
     // TODO Extract auth code from request
     let resp = match extract_auth_code(&request) {
         Some(code) => {
-            println!("🎁 saving auth code {code}");
+            debug!("🎁 saving auth code {code}");
             // TODO Build "acknowledgment" body
             let body = Body::from(format!("{}\n", code.clone()));
             {
                 let mut auth_code = auth_code_holder.lock().unwrap();
                 *auth_code = Some(code);
             }
-            println!("📤 sending shutdown signal");
+            debug!("📤 sending shutdown signal");
             control_sender.send(ServerControl::Shutdown).await?;
             Response::builder()
                 .header("Connection", "close")
@@ -103,10 +104,10 @@ fn query_params(request: &Request<Body>) -> HashMap<String, String> {
 async fn shutdown_signal(mut control_receiver: mpsc::Receiver<ServerControl>, timeout: u64) {
     let timeout = time::timeout(Duration::from_secs(timeout), async {
         match control_receiver.recv().await {
-            Some(_) => println!("📥 received shutdown signal"),
-            None => println!("⬇️ channel was dropped"),
+            Some(_) => debug!("📥 received shutdown signal"),
+            None => debug!("⬇️ channel was dropped"),
         };
     });
     let _ = timeout.await;
-    println!("🛑 shutting down server...");
+    info!("🛑 shutting down server...");
 }

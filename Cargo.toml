@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+log = "0.4"
 oauth2 = "4.2"
 open = "4.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -16,3 +17,7 @@ thiserror = "1.0"
 [dev-dependencies]
 rstest = "0.17"
 mockall = "0.11.3"
+pretty_env_logger = "0.5"
+
+[[example]]
+name = "auth0"
