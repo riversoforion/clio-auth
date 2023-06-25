@@ -1,115 +1,112 @@
-use std::convert::Infallible;
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::thread;
+use std::sync::Arc;
+use std::time::Duration;
 
-use crate::server::ServerControl::Shutdown;
-use crate::server::ServerError::StartupFailed;
-use crossbeam::channel::{bounded, Receiver, Sender};
-use hyper::server::conn::AddrStream;
+use crate::error::ServerError;
+use crate::AuthCodeHolder;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
-use oauth2::{TokenResponse, TokenType};
-use thiserror::Error;
-
-// TODO thiserror
-#[derive(Error, Debug)]
-pub enum ServerError {
-    #[error("server startup failed")]
-    StartupFailed,
-}
-
-pub type ServerResult<T> = Result<T, ServerError>;
+use tokio::sync::mpsc;
+use tokio::time;
 
 #[derive(Debug)]
-pub(crate) struct AuthServer {
-    result_receiver: Receiver<ServerResult<String>>,
-    control_sender: Sender<ServerControl>,
-}
-
-impl AuthServer {
-    pub(crate) async fn start(addr: SocketAddr) -> ServerResult<AuthServer> {
-        // Create channel for receiving results (token or error)
-        // Create channel for shutting down server
-        // Spawn thread with Hyper web server
-        //  - Receiver: shutdown channel
-        //  - Sender: results channel
-        // Spawn thread to wait for results or timeout
-        //  - Receiver: results channel
-        //  - Sender: shutdown channel
-        //  - After result or timeout, send shutdown signal
-        // Save token result into AuthServer struct
-        let (result_snd, result_rcv) = bounded(1);
-        let (ctrl_snd, ctrl_rcv) = bounded(1);
-        let context = AppContext {
-            result_sender: result_snd,
-        };
-
-        let make_svc = make_service_fn(move |_conn: &AddrStream| {
-            let context = context.clone();
-            let service = service_fn(move |req| AuthServer::handle_request(context.clone(), req));
-            async move { Ok::<_, Infallible>(service) }
-        });
-        let server = Server::bind(&addr).serve(make_svc);
-        let graceful = server.with_graceful_shutdown(AuthServer::shutdown_signal(ctrl_rcv));
-
-        if let Err(e) = graceful.await {
-            eprintln!("server error: {}", e);
-            Err(StartupFailed)
-        } else {
-            Ok(AuthServer {
-                result_receiver: result_rcv,
-                control_sender: ctrl_snd,
-            })
-        }
-    }
-
-    async fn handle_request(
-        context: AppContext<String>,
-        req: Request<Body>,
-    ) -> Result<Response<Body>, Infallible> {
-        Ok(Response::new(Body::from("Handling request")))
-    }
-
-    async fn shutdown_signal(control_receiver: Receiver<ServerControl>) {
-        let srv_ctl = async {
-            loop {
-                match control_receiver.recv() {
-                    Ok(Shutdown) => break,
-                    _ => continue,
-                }
-            }
-        };
-        // TODO implement a timeout
-        // TODO Wait for both futures
-        srv_ctl.await;
-        println!("shutting down auth code server");
-    }
-
-    pub(crate) async fn get_tokens(&self) -> ServerResult<String> {
-        match self.result_receiver.recv() {
-            Ok(result) => result,
-            // TODO thiserror to translate RecvError
-            Err(error) => panic!("oh noes!"),
-        }
-    }
-
-    pub(crate) fn shutdown(&mut self) -> ServerResult<()> {
-        Ok(())
-    }
-}
-
-impl Drop for AuthServer {
-    fn drop(&mut self) {
-        todo!("Shutdown the server")
-    }
-}
-
-#[derive(Clone, Debug)]
-struct AppContext<T> {
-    result_sender: Sender<ServerResult<T>>,
-}
-
-#[derive(Debug)]
-enum ServerControl {
+pub enum ServerControl {
     Shutdown,
+}
+
+pub(crate) async fn launch(
+    address: SocketAddr,
+    auth_code_holder: AuthCodeHolder,
+    control_sender: mpsc::Sender<ServerControl>,
+    control_receiver: mpsc::Receiver<ServerControl>,
+    timeout: u64,
+) {
+    println!("🚀 launching http server...");
+    // Create Hyper server
+    let service_factory = make_service_fn(move |_| {
+        let control_sender = control_sender.to_owned();
+        let auth_code_holder = Arc::clone(&auth_code_holder);
+        async {
+            Ok::<_, hyper::Error>(service_fn(move |req| {
+                handle_request(
+                    req,
+                    Arc::clone(&auth_code_holder),
+                    control_sender.to_owned(),
+                )
+            }))
+        }
+    });
+    let server = Server::bind(&address).serve(service_factory);
+    // Configure graceful shutdown
+    let server = server.with_graceful_shutdown(shutdown_signal(control_receiver, timeout));
+    println!("🏃 server running at http://{}", address);
+    println!("⏳ waiting for {timeout} seconds");
+    if let Err(e) = server.await {
+        eprintln!("⚠️ server error: {}", e);
+    }
+}
+
+async fn handle_request(
+    request: Request<Body>,
+    auth_code_holder: AuthCodeHolder,
+    control_sender: mpsc::Sender<ServerControl>,
+) -> Result<Response<Body>, ServerError> {
+    // TODO Extract auth code from request
+    let resp = match extract_auth_code(&request) {
+        Some(code) => {
+            println!("🎁 saving auth code {code}");
+            // TODO Build "acknowledgment" body
+            let body = Body::from(format!("{}\n", code.clone()));
+            {
+                let mut auth_code = auth_code_holder.lock().unwrap();
+                *auth_code = Some(code);
+            }
+            println!("📤 sending shutdown signal");
+            control_sender.send(ServerControl::Shutdown).await?;
+            Response::builder()
+                .header("Connection", "close")
+                .body(body)
+                .unwrap()
+        },
+        None => Response::builder()
+            .status(400)
+            .header("Connection", "close")
+            .body(Body::from(
+                "Query parameter 'myparam' is required".to_string(),
+            ))
+            .unwrap(),
+    };
+    Ok::<_, ServerError>(resp)
+}
+
+fn extract_auth_code(request: &Request<Body>) -> Option<String> {
+    let params: HashMap<String, String> = query_params(&request);
+    match params.get("myparam") {
+        Some(myparam) => Some(myparam.chars().rev().collect()),
+        None => None,
+    }
+}
+
+fn query_params(request: &Request<Body>) -> HashMap<String, String> {
+    request
+        .uri()
+        .query()
+        .map(|v| {
+            url::form_urlencoded::parse(v.as_bytes())
+                .into_owned()
+                .collect()
+        })
+        .unwrap_or_else(HashMap::new)
+}
+
+async fn shutdown_signal(mut control_receiver: mpsc::Receiver<ServerControl>, timeout: u64) {
+    let timeout = time::timeout(Duration::from_secs(timeout), async {
+        match control_receiver.recv().await {
+            Some(_) => println!("📥 received shutdown signal"),
+            None => println!("⬇️ channel was dropped"),
+        };
+    });
+    let _ = timeout.await;
+    println!("🛑 shutting down server...");
 }

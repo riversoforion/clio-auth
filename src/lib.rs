@@ -22,37 +22,26 @@
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
 use std::ops::Range;
+use std::sync::{Arc, Mutex};
 
 use oauth2::{ErrorResponse, RevocableToken, TokenIntrospectionResponse, TokenResponse, TokenType};
-use thiserror::Error;
+use tokio::runtime::Handle;
+use tokio::sync::mpsc;
 
-use crate::server::AuthServer;
-use ConfigError::{CannotBindAddress, InvalidServerConfig};
+pub use error::ConfigError;
 
-pub use server::{ServerError, ServerResult};
+use crate::error::ServerError;
+use crate::server::launch;
+use crate::ConfigError::{CannotBindAddress, InvalidServerConfig};
 
+mod error;
 mod server;
-
-pub fn call_me() {
-    println!("Hello from the library");
-}
-
-/// Defines the various types of errors that can occur during the OAuth flow.
-#[derive(Error, Debug)]
-pub enum ConfigError {
-    /// Indicates that the web server parameters were not correct.
-    #[error("invalid server config (expected {expected}, found {found})")]
-    InvalidServerConfig { expected: String, found: String },
-    /// Indicates that the configured address and port were not available to listen on.
-    #[error("cannot bind to {addr} on any port from {}-{}", port_range.start, port_range.end - 1)]
-    CannotBindAddress {
-        addr: IpAddr,
-        port_range: Range<u16>,
-    },
-}
 
 /// A shortcut [`Result`] using an error of [`ConfigError`].
 pub type ConfigResult<T> = Result<T, ConfigError>;
+/// A shortcut [`Result`] using an error of [`ServerError`].
+pub type ServerResult<T> = Result<T, ServerError>;
+type AuthCodeHolder = Arc<Mutex<Option<String>>>;
 
 /// The CLI OAuth helper.
 #[derive(Debug)]
@@ -67,7 +56,9 @@ where
 {
     oauth_client: oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
     address: SocketAddr,
-    auth_server: Option<AuthServer>,
+    timeout: u64,
+    auth_code: Option<String>,
+    token: Option<TR>,
 }
 
 impl<TE, TR, TT, TIR, RT, TRE> CliOAuth<TE, TR, TT, TIR, RT, TRE>
@@ -85,19 +76,35 @@ where
         CliOAuthBuilder::new(oauth_client)
     }
 
-    pub async fn start(&mut self) -> ServerResult<()> {
-        // Start the server
-        let auth_server = AuthServer::start(self.address).await?;
-        self.auth_server = Some(auth_server);
-        Ok(())
+    pub async fn fetch_auth_code(&mut self) -> ServerResult<()> {
+        // Create holder for the OAuth auth code
+        let auth_code_holder: AuthCodeHolder = Arc::new(Mutex::new(None));
+        // Create communication channels
+        let (control_sender, control_receiver) = mpsc::channel(1);
+
+        // Acquire handle to Tokio runtime
+        let handle = Handle::try_current()?;
+        let server = handle.spawn(launch(
+            self.address.clone(),
+            auth_code_holder.clone(),
+            control_sender.clone(),
+            control_receiver,
+            self.timeout,
+        ));
+
+        server.await?;
+
+        let result = auth_code_holder.lock().unwrap();
+        match result.as_ref() {
+            Some(res) => {
+                self.auth_code = Some(res.to_owned());
+                Ok(())
+            },
+            None => Err(ServerError::NoResult),
+        }
     }
 
     pub async fn token(&self) -> Box<TR> {
-        // Set the redirect URL on the OAuth client
-        // Generate the PKCE challenge
-        // Generate the authorization URL
-        // Open the system browser with the auth URL
-        // Wait for the token from the auth server
         todo!()
     }
 }
@@ -105,6 +112,7 @@ where
 const PORT_MIN: u16 = 1024;
 const DEFAULT_PORT_MIN: u16 = 3456;
 const DEFAULT_PORT_MAX: u16 = DEFAULT_PORT_MIN + 10;
+const DEFAULT_TIMEOUT: u64 = 60;
 
 /// A builder for [`CliOAuth`] structs.
 ///
@@ -123,6 +131,7 @@ where
     port_range: Range<u16>,
     ip_address: IpAddr,
     socket_address: Option<SocketAddr>,
+    timeout: u64,
 }
 
 impl<TE, TR, TT, TIR, RT, TRE> CliOAuthBuilder<TE, TR, TT, TIR, RT, TRE>
@@ -140,6 +149,7 @@ where
             port_range: DEFAULT_PORT_MIN..DEFAULT_PORT_MAX,
             ip_address: IpAddr::V4(Ipv4Addr::LOCALHOST),
             socket_address: None,
+            timeout: DEFAULT_TIMEOUT,
         }
     }
 
@@ -201,6 +211,17 @@ where
         self
     }
 
+    /// Configures the number of seconds the server will wait for an authorization code.
+    ///
+    /// If the server has not received a request containing a valid authorization code, it will
+    /// shut itself down, and the token exchange will not be possible.
+    ///
+    /// The default is `60` seconds.
+    pub fn timeout(mut self, timeout: u64) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
     /// Constructs the [`CliOAuth`] instance.
     pub fn build(self) -> ConfigResult<CliOAuth<TE, TR, TT, TIR, RT, TRE>> {
         self.validate()?;
@@ -208,7 +229,9 @@ where
         Ok(CliOAuth {
             oauth_client: self.oauth_client,
             address: socket_addr,
-            auth_server: None,
+            timeout: self.timeout,
+            auth_code: None,
+            token: None,
         })
     }
 }
@@ -318,7 +341,10 @@ mod tests {
         use rstest::{fixture, rstest};
 
         use crate::tests::{next_ports, LOCALHOST};
-        use crate::{CliOAuthBuilder, DEFAULT_PORT_MAX, DEFAULT_PORT_MIN, PORT_MIN};
+        use crate::{
+            CliOAuth, CliOAuthBuilder, DEFAULT_PORT_MAX, DEFAULT_PORT_MIN, DEFAULT_TIMEOUT,
+            PORT_MIN,
+        };
 
         #[fixture]
         fn oauth_client() -> BasicClient {
@@ -340,6 +366,7 @@ mod tests {
             );
             assert_eq!(builder.ip_address.clone(), LOCALHOST);
             assert_eq!(builder.socket_address.clone(), None);
+            assert_eq!(builder.timeout, DEFAULT_TIMEOUT);
             builder.validate().expect("builder should be valid");
         }
 
@@ -432,13 +459,20 @@ mod tests {
         }
 
         #[rstest]
+        fn set_timeout(oauth_client: BasicClient) {
+            let builder = CliOAuthBuilder::new(oauth_client).timeout(120);
+            assert_eq!(builder.timeout, 120);
+        }
+
+        #[rstest]
         fn build_valid_struct(oauth_client: BasicClient) {
             let (port, _) = next_ports(1);
-            let builder = CliOAuthBuilder::new(oauth_client).port(port);
+            let builder = CliOAuthBuilder::new(oauth_client).port(port).timeout(30);
             let res = builder.build();
             let auth = res.expect("valid struct should be built");
             let built_addr = auth.address;
             assert_eq!(built_addr, SocketAddr::new(LOCALHOST, port));
+            assert_eq!(auth.timeout, 30);
         }
 
         #[rstest]
