@@ -6,7 +6,6 @@ use oauth2::{AuthUrl, ClientId, TokenUrl};
 async fn main() -> Result<(), String> {
     pretty_env_logger::init();
 
-    // TODO Cleanup output
     debug!("😃 I'm alive");
     // Configure OAuth struct
     let client_id = "gc1p9v7obY6fuPFv6nDz8oSVoO6lX4Ia";

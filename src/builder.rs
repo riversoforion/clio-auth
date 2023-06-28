@@ -122,7 +122,6 @@ where
             oauth_client: self.oauth_client,
             address: socket_addr,
             timeout: self.timeout,
-            auth_code: None,
             token: None,
         })
     }

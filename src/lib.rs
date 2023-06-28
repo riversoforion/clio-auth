@@ -20,6 +20,7 @@
 //! [1]: https://www.rfc-editor.org/rfc/rfc7636
 //! [2]: https://crates.io/crates/oauth2
 
+use std::fmt::{Debug, Formatter};
 use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
@@ -43,7 +44,7 @@ mod server;
 pub type ConfigResult<T> = Result<T, ConfigError>;
 /// A shortcut [`Result`] using an error of [`ServerError`].
 pub type ServerResult<T> = Result<T, ServerError>;
-type AuthCodeHolder = Arc<Mutex<Option<String>>>;
+type AuthorizationContextHolder = Arc<Mutex<Option<AuthorizationContext>>>;
 
 /// The CLI OAuth helper.
 #[derive(Debug)]
@@ -59,7 +60,6 @@ where
     oauth_client: oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
     address: SocketAddr,
     timeout: u64,
-    auth_code: Option<String>,
     token: Option<TR>,
 }
 
@@ -79,8 +79,8 @@ where
     }
 
     pub async fn fetch_auth_code(&mut self) -> ServerResult<()> {
-        // Create holder for the OAuth auth code
-        let auth_code_holder: AuthCodeHolder = Arc::new(Mutex::new(None));
+        // TODO Enrich OAuth client with challenge, state, and redirect URL
+        // TODO Save state and challenge for later
         // Create communication channels
         let (control_sender, control_receiver) = mpsc::channel(1);
 
@@ -88,26 +88,38 @@ where
         let handle = Handle::try_current()?;
         let server = handle.spawn(launch(
             self.address.clone(),
-            auth_code_holder.clone(),
+            AuthorizationContextHolder::new(Mutex::new(None)),
             control_sender.clone(),
             control_receiver,
             self.timeout,
         ));
 
+        // TODO Open browser window to authorization link
+
         server.await?;
 
-        let result = auth_code_holder.lock().unwrap();
-        match result.as_ref() {
-            Some(res) => {
-                self.auth_code = Some(res.to_owned());
-                Ok(())
-            },
-            None => Err(ServerError::NoResult),
-        }
+        // TODO Validate the state
+        // TODO Exchange the auth code for a token
+        todo!("Check for valid token")
     }
 
     pub async fn token(&self) -> Box<TR> {
         todo!()
+    }
+}
+
+struct AuthorizationContext {
+    pub auth_code: String,
+    pub state: String,
+}
+
+impl Debug for AuthorizationContext {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "auth code={}*****, state={}*****",
+            self.auth_code.chars().take(3).collect::<String>(),
+            self.state.chars().take(3).collect::<String>(),
+        ))
     }
 }
 

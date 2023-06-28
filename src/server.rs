@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::error::ServerError;
-use crate::AuthCodeHolder;
+use crate::{AuthorizationContext, AuthorizationContextHolder};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use log::{debug, error, info};
@@ -18,7 +18,7 @@ pub enum ServerControl {
 
 pub(crate) async fn launch(
     address: SocketAddr,
-    auth_code_holder: AuthCodeHolder,
+    auth_code_holder: AuthorizationContextHolder,
     control_sender: mpsc::Sender<ServerControl>,
     control_receiver: mpsc::Receiver<ServerControl>,
     timeout: u64,
@@ -50,19 +50,17 @@ pub(crate) async fn launch(
 
 async fn handle_request(
     request: Request<Body>,
-    auth_code_holder: AuthCodeHolder,
+    auth_code_holder: AuthorizationContextHolder,
     control_sender: mpsc::Sender<ServerControl>,
 ) -> Result<Response<Body>, ServerError> {
-    // TODO Extract auth code from request
-    let resp = match extract_auth_code(&request) {
-        Some(code) => {
-            debug!("🎁 saving auth code {code}");
-            // TODO Build "acknowledgment" body
-            let body = Body::from(format!("{}\n", code.clone()));
+    let resp = match extract_auth_params(&request) {
+        Some(context) => {
+            debug!("🎁 handling authorization context {context:?}");
             {
                 let mut auth_code = auth_code_holder.lock().unwrap();
-                *auth_code = Some(code);
+                *auth_code = Some(context);
             }
+            let body = build_ok_body();
             debug!("📤 sending shutdown signal");
             control_sender.send(ServerControl::Shutdown).await?;
             Response::builder()
@@ -73,20 +71,23 @@ async fn handle_request(
         None => Response::builder()
             .status(400)
             .header("Connection", "close")
-            .body(Body::from(
-                "Query parameter 'myparam' is required".to_string(),
-            ))
+            .body(build_err_body("Authorization code or state not provided"))
             .unwrap(),
     };
     Ok::<_, ServerError>(resp)
 }
 
-fn extract_auth_code(request: &Request<Body>) -> Option<String> {
+fn extract_auth_params(request: &Request<Body>) -> Option<AuthorizationContext> {
     let params: HashMap<String, String> = query_params(&request);
-    match params.get("myparam") {
-        Some(myparam) => Some(myparam.chars().rev().collect()),
-        None => None,
-    }
+    let auth_code = match params.get("code") {
+        Some(code) => code.to_owned(),
+        None => return None,
+    };
+    let state = match params.get("state") {
+        Some(state) => state.to_owned(),
+        None => return None,
+    };
+    Some(AuthorizationContext { auth_code, state })
 }
 
 fn query_params(request: &Request<Body>) -> HashMap<String, String> {
@@ -99,6 +100,31 @@ fn query_params(request: &Request<Body>) -> HashMap<String, String> {
                 .collect()
         })
         .unwrap_or_else(HashMap::new)
+}
+
+fn build_ok_body() -> Body {
+    let content = String::from(
+        r"
+    <html>
+        <h1>Success!</h1>
+        <p>You have successfully authenticated. You can close this window now.</p>
+    </html>
+    ",
+    );
+    Body::from(content)
+}
+
+fn build_err_body(details: &str) -> Body {
+    let content = String::from(format!(
+        r"
+    <html>
+        <h1 style='color: red'>Error!</h1>
+        <p>There was an error authenticating. Please try again.</p>
+        <p>Details: {details}</p>
+    </html>
+    ",
+    ));
+    Body::from(content)
 }
 
 async fn shutdown_signal(mut control_receiver: mpsc::Receiver<ServerControl>, timeout: u64) {
