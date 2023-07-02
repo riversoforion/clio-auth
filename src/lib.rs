@@ -25,14 +25,19 @@ use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
-use oauth2::{ErrorResponse, RevocableToken, TokenIntrospectionResponse, TokenResponse, TokenType};
+use oauth2::{
+    AuthorizationCode, CsrfToken, ErrorResponse, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl,
+    RevocableToken, TokenIntrospectionResponse, TokenResponse, TokenType,
+};
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
+use url::Url;
 
 use crate::builder::CliOAuthBuilder;
 
-use crate::error::ConfigError;
 use crate::error::ServerError;
+use crate::error::ServerError::NoResult;
+use crate::error::{AuthError, ConfigError};
 use crate::server::launch;
 use crate::ConfigError::CannotBindAddress;
 
@@ -43,77 +48,111 @@ mod server;
 /// A shortcut [`Result`] using an error of [`ConfigError`].
 pub type ConfigResult<T> = Result<T, ConfigError>;
 /// A shortcut [`Result`] using an error of [`ServerError`].
-pub type ServerResult<T> = Result<T, ServerError>;
-type AuthorizationContextHolder = Arc<Mutex<Option<AuthorizationContext>>>;
+type AuthorizationResultHolder = Arc<Mutex<Option<AuthorizationResult>>>;
 
 /// The CLI OAuth helper.
 #[derive(Debug)]
-pub struct CliOAuth<TE, TR, TT, TIR, RT, TRE>
-where
-    TE: ErrorResponse,
-    TR: TokenResponse<TT>,
-    TT: TokenType,
-    TIR: TokenIntrospectionResponse<TT>,
-    RT: RevocableToken,
-    TRE: ErrorResponse,
-{
-    oauth_client: oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
+pub struct CliOAuth {
     address: SocketAddr,
     timeout: u64,
-    token: Option<TR>,
+    auth_context: Option<AuthContext>,
+    auth_result: Option<AuthorizationResult>,
 }
 
-impl<TE, TR, TT, TIR, RT, TRE> CliOAuth<TE, TR, TT, TIR, RT, TRE>
-where
-    TE: ErrorResponse,
-    TR: TokenResponse<TT>,
-    TT: TokenType,
-    TIR: TokenIntrospectionResponse<TT>,
-    RT: RevocableToken,
-    TRE: ErrorResponse,
-{
-    pub fn builder(
-        oauth_client: oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
-    ) -> CliOAuthBuilder<TE, TR, TT, TIR, RT, TRE> {
-        CliOAuthBuilder::new(oauth_client)
+impl CliOAuth {
+    pub fn builder() -> CliOAuthBuilder {
+        CliOAuthBuilder::new()
     }
 
-    pub async fn fetch_auth_code(&mut self) -> ServerResult<()> {
-        // TODO Enrich OAuth client with challenge, state, and redirect URL
-        // TODO Save state and challenge for later
+    pub async fn authorize<TE, TR, TT, TIR, RT, TRE>(
+        &mut self,
+        oauth_client: &oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
+    ) -> Result<(), ServerError>
+    where
+        TE: ErrorResponse + 'static,
+        TR: TokenResponse<TT>,
+        TT: TokenType,
+        TIR: TokenIntrospectionResponse<TT>,
+        RT: RevocableToken,
+        TRE: ErrorResponse + 'static,
+    {
+        let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
+        let (auth_url, state) = oauth_client
+            .authorize_url(CsrfToken::new_random)
+            // This is where we need to set scopes on the request
+            // TODO Add scope configuration to Builder
+            .set_pkce_challenge(pkce_challenge)
+            .url();
         // Create communication channels
         let (control_sender, control_receiver) = mpsc::channel(1);
 
         // Acquire handle to Tokio runtime
         let handle = Handle::try_current()?;
+        let result = AuthorizationResultHolder::new(Mutex::new(None));
         let server = handle.spawn(launch(
             self.address.clone(),
-            AuthorizationContextHolder::new(Mutex::new(None)),
+            Arc::clone(&result),
             control_sender.clone(),
             control_receiver,
             self.timeout,
         ));
 
         // TODO Open browser window to authorization link
+        println!("Authorization URL: {}", auth_url);
 
         server.await?;
 
-        // TODO Validate the state
-        // TODO Exchange the auth code for a token
-        todo!("Check for valid token")
+        let AuthorizationResult {
+            auth_code,
+            state: state_in,
+        } = match &mut *result.lock().unwrap() {
+            Some(auth_result) => auth_result.clone(),
+            None => return Err(NoResult),
+        };
+        self.auth_result = Some(AuthorizationResult {
+            auth_code: auth_code.clone(),
+            state: state_in.clone(),
+        });
+
+        let auth_ctx = AuthContext {
+            auth_code: AuthorizationCode::new(String::from(auth_code.clone())),
+            state,
+            pkce_verifier,
+        };
+        self.auth_context = Some(auth_ctx);
+
+        Ok(())
     }
 
-    pub async fn token(&self) -> Box<TR> {
-        todo!()
+    pub fn validate(&mut self) -> Result<AuthContext, AuthError> {
+        let expected_state = self.auth_result.take().ok_or(AuthError::NoResult)?.state;
+        match self.auth_context.take() {
+            Some(auth_ctx) if auth_ctx.state.secret() == &expected_state => Ok(auth_ctx),
+            Some(_) => Err(AuthError::CsrfMismatch),
+            None => Err(AuthError::NoResult),
+        }
+    }
+
+    pub fn redirect_url(&self) -> RedirectUrl {
+        let url = format!("http://{}", self.address);
+        RedirectUrl::from_url(Url::parse(&url).unwrap())
     }
 }
 
-struct AuthorizationContext {
+#[derive(Debug)]
+pub struct AuthContext {
+    pub auth_code: AuthorizationCode,
+    pub state: CsrfToken,
+    pub pkce_verifier: PkceCodeVerifier,
+}
+
+#[derive(Clone)]
+struct AuthorizationResult {
     pub auth_code: String,
     pub state: String,
 }
 
-impl Debug for AuthorizationContext {
+impl Debug for AuthorizationResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!(
             "auth code={}*****, state={}*****",

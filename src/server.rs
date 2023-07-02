@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::error::ServerError;
-use crate::{AuthorizationContext, AuthorizationContextHolder};
+use crate::{AuthorizationResult, AuthorizationResultHolder};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use log::{debug, error, info};
@@ -18,7 +18,7 @@ pub enum ServerControl {
 
 pub(crate) async fn launch(
     address: SocketAddr,
-    auth_code_holder: AuthorizationContextHolder,
+    auth_code_holder: AuthorizationResultHolder,
     control_sender: mpsc::Sender<ServerControl>,
     control_receiver: mpsc::Receiver<ServerControl>,
     timeout: u64,
@@ -50,15 +50,16 @@ pub(crate) async fn launch(
 
 async fn handle_request(
     request: Request<Body>,
-    auth_code_holder: AuthorizationContextHolder,
+    auth_code_holder: AuthorizationResultHolder,
     control_sender: mpsc::Sender<ServerControl>,
 ) -> Result<Response<Body>, ServerError> {
     let resp = match extract_auth_params(&request) {
-        Some(context) => {
-            debug!("🎁 handling authorization context {context:?}");
+        Some(result) => {
+            debug!("🎁 handling authorization result {result:?}");
+            // Artificial scope to unlock the mutex
             {
                 let mut auth_code = auth_code_holder.lock().unwrap();
-                *auth_code = Some(context);
+                *auth_code = Some(result);
             }
             let body = build_ok_body();
             debug!("📤 sending shutdown signal");
@@ -77,7 +78,7 @@ async fn handle_request(
     Ok::<_, ServerError>(resp)
 }
 
-fn extract_auth_params(request: &Request<Body>) -> Option<AuthorizationContext> {
+fn extract_auth_params(request: &Request<Body>) -> Option<AuthorizationResult> {
     let params: HashMap<String, String> = query_params(&request);
     let auth_code = match params.get("code") {
         Some(code) => code.to_owned(),
@@ -87,7 +88,7 @@ fn extract_auth_params(request: &Request<Body>) -> Option<AuthorizationContext> 
         Some(state) => state.to_owned(),
         None => return None,
     };
-    Some(AuthorizationContext { auth_code, state })
+    Some(AuthorizationResult { auth_code, state })
 }
 
 fn query_params(request: &Request<Body>) -> HashMap<String, String> {

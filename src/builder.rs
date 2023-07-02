@@ -1,8 +1,6 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::ops::Range;
 
-use oauth2::{ErrorResponse, RevocableToken, TokenIntrospectionResponse, TokenResponse, TokenType};
-
 use crate::ConfigError::{CannotBindAddress, InvalidServerConfig};
 use crate::*;
 
@@ -10,34 +8,16 @@ use crate::*;
 ///
 /// Not constructed directly. See [`CliOAuth::builder()`].
 #[derive(Debug)]
-pub struct CliOAuthBuilder<TE, TR, TT, TIR, RT, TRE>
-where
-    TE: ErrorResponse,
-    TR: TokenResponse<TT>,
-    TT: TokenType,
-    TIR: TokenIntrospectionResponse<TT>,
-    RT: RevocableToken,
-    TRE: ErrorResponse,
-{
-    oauth_client: oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
+pub struct CliOAuthBuilder {
     port_range: Range<u16>,
     ip_address: IpAddr,
     socket_address: Option<SocketAddr>,
     timeout: u64,
 }
 
-impl<TE, TR, TT, TIR, RT, TRE> CliOAuthBuilder<TE, TR, TT, TIR, RT, TRE>
-where
-    TE: ErrorResponse,
-    TR: TokenResponse<TT>,
-    TT: TokenType,
-    TIR: TokenIntrospectionResponse<TT>,
-    RT: RevocableToken,
-    TRE: ErrorResponse,
-{
-    pub(crate) fn new(oauth_client: oauth2::Client<TE, TR, TT, TIR, RT, TRE>) -> Self {
+impl CliOAuthBuilder {
+    pub(crate) fn new() -> Self {
         CliOAuthBuilder {
-            oauth_client,
             port_range: DEFAULT_PORT_MIN..DEFAULT_PORT_MAX,
             ip_address: IpAddr::V4(Ipv4Addr::LOCALHOST),
             socket_address: None,
@@ -68,7 +48,7 @@ where
 
     /// Configures a single port for the web server to attempt to bind to.
     ///
-    /// For simplicity, must be a non-privileged port (greater that or equal to `1024`).
+    /// For simplicity, must be a non-privileged port (greater than or equal to `1024`).
     pub fn port(mut self, port: u16) -> Self {
         self.port_range = port..(port + 1);
         self
@@ -115,14 +95,14 @@ where
     }
 
     /// Constructs the [`CliOAuth`] instance with the configuration captured in this builder.
-    pub fn build(self) -> ConfigResult<CliOAuth<TE, TR, TT, TIR, RT, TRE>> {
+    pub fn build(self) -> ConfigResult<CliOAuth> {
         self.validate()?;
         let socket_addr = self.resolve_address()?;
         Ok(CliOAuth {
-            oauth_client: self.oauth_client,
             address: socket_addr,
             timeout: self.timeout,
-            token: None,
+            auth_context: None,
+            auth_result: None,
         })
     }
 }
@@ -131,28 +111,15 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
     use std::str::FromStr;
 
-    use oauth2::basic::BasicClient;
-    use oauth2::{AuthUrl, ClientId, RedirectUrl, TokenUrl};
-    use rstest::{fixture, rstest};
+    use rstest::rstest;
 
     use super::CliOAuthBuilder;
     use crate::tests::{next_ports, LOCALHOST};
     use crate::{DEFAULT_PORT_MAX, DEFAULT_PORT_MIN, DEFAULT_TIMEOUT, PORT_MIN};
 
-    #[fixture]
-    fn oauth_client() -> BasicClient {
-        BasicClient::new(
-            ClientId::new("1234".into()),
-            None,
-            AuthUrl::new("https://auth.example.com/auth".into()).unwrap(),
-            Some(TokenUrl::new("https://auth.example.com/token".into()).unwrap()),
-        )
-        .set_redirect_uri(RedirectUrl::new("https://localhost:9000".into()).unwrap())
-    }
-
     #[rstest]
-    fn all_defaults(oauth_client: BasicClient) {
-        let builder = CliOAuthBuilder::new(oauth_client);
+    fn all_defaults() {
+        let builder = CliOAuthBuilder::new();
         assert_eq!(
             builder.port_range.clone(),
             DEFAULT_PORT_MIN..DEFAULT_PORT_MAX
@@ -164,9 +131,9 @@ mod tests {
     }
 
     #[rstest]
-    fn set_single_port(oauth_client: BasicClient) {
+    fn set_single_port() {
         let port = 2048;
-        let builder = CliOAuthBuilder::new(oauth_client).port(port);
+        let builder = CliOAuthBuilder::new().port(port);
         assert!(builder.port_range.contains(&port));
         builder.validate().expect("builder should be valid");
     }
@@ -175,8 +142,8 @@ mod tests {
     #[case::one_less_than_min(PORT_MIN - 1)]
     #[case::one(1)]
     #[case::zero(0)]
-    fn set_single_invalid_port(oauth_client: BasicClient, #[case] port: u16) {
-        let builder = CliOAuthBuilder::new(oauth_client).port(port);
+    fn set_single_invalid_port(#[case] port: u16) {
+        let builder = CliOAuthBuilder::new().port(port);
         let error = builder.validate().expect_err("Port should be invalid");
         assert_eq!(
             format!("{error}"),
@@ -185,9 +152,9 @@ mod tests {
     }
 
     #[rstest]
-    fn set_port_range(oauth_client: BasicClient) {
+    fn set_port_range() {
         let port_range = 2048..4096;
-        let builder = CliOAuthBuilder::new(oauth_client).port_range(port_range.clone());
+        let builder = CliOAuthBuilder::new().port_range(port_range.clone());
         assert_eq!(builder.port_range.clone(), port_range);
         builder.validate().expect("builder should be valid");
     }
@@ -196,8 +163,8 @@ mod tests {
     #[case::one_less_than_min(PORT_MIN - 1)]
     #[case::one(1)]
     #[case::zero(0)]
-    fn set_invalid_port_range(oauth_client: BasicClient, #[case] lower_port: u16) {
-        let builder = CliOAuthBuilder::new(oauth_client).port_range(lower_port..PORT_MIN);
+    fn set_invalid_port_range(#[case] lower_port: u16) {
+        let builder = CliOAuthBuilder::new().port_range(lower_port..PORT_MIN);
         let error = builder
             .validate()
             .expect_err("Port range should be invalid");
@@ -208,8 +175,8 @@ mod tests {
     }
 
     #[rstest]
-    fn set_ip_address(oauth_client: BasicClient) {
-        let builder = CliOAuthBuilder::new(oauth_client)
+    fn set_ip_address() {
+        let builder = CliOAuthBuilder::new()
             .ip_address(IpAddr::V4(Ipv4Addr::from_str("192.168.0.20").unwrap()));
         assert_eq!(
             builder.ip_address.clone(),
@@ -219,20 +186,20 @@ mod tests {
     }
 
     #[rstest]
-    fn set_socket_address(oauth_client: BasicClient) {
+    fn set_socket_address() {
         let addr = SocketAddr::from_str("192.168.0.20:4096").unwrap();
-        let builder = CliOAuthBuilder::new(oauth_client).socket_address(addr);
+        let builder = CliOAuthBuilder::new().socket_address(addr);
         assert_eq!(builder.socket_address.unwrap(), addr);
         builder.validate().expect("builder should be valid");
     }
 
     #[rstest]
-    fn socket_address_overrides_ip_and_port(oauth_client: BasicClient) {
+    fn socket_address_overrides_ip_and_port() {
         let (start_port, end_port) = next_ports(5);
         let port_range = start_port..end_port;
         let socket_addr = SocketAddr::from_str("127.0.0.1:8192").unwrap();
 
-        let builder = CliOAuthBuilder::new(oauth_client)
+        let builder = CliOAuthBuilder::new()
             .ip_address(LOCALHOST)
             .port_range(port_range.clone())
             .socket_address(socket_addr);
@@ -241,26 +208,24 @@ mod tests {
     }
 
     #[rstest]
-    fn socket_address_from_ip_and_port_range(oauth_client: BasicClient) {
+    fn socket_address_from_ip_and_port_range() {
         let (port, _) = next_ports(1);
-        let builder = CliOAuthBuilder::new(oauth_client)
-            .ip_address(LOCALHOST)
-            .port(port);
+        let builder = CliOAuthBuilder::new().ip_address(LOCALHOST).port(port);
         let resolved_address = builder.resolve_address().unwrap();
         assert_eq!(resolved_address.port(), port);
         assert_eq!(resolved_address.ip(), LOCALHOST);
     }
 
     #[rstest]
-    fn set_timeout(oauth_client: BasicClient) {
-        let builder = CliOAuthBuilder::new(oauth_client).timeout(120);
+    fn set_timeout() {
+        let builder = CliOAuthBuilder::new().timeout(120);
         assert_eq!(builder.timeout, 120);
     }
 
     #[rstest]
-    fn build_valid_struct(oauth_client: BasicClient) {
+    fn build_valid_struct() {
         let (port, _) = next_ports(1);
-        let builder = CliOAuthBuilder::new(oauth_client).port(port).timeout(30);
+        let builder = CliOAuthBuilder::new().port(port).timeout(30);
         let res = builder.build();
         let auth = res.expect("valid struct should be built");
         let built_addr = auth.address;
@@ -269,9 +234,9 @@ mod tests {
     }
 
     #[rstest]
-    fn build_struct_with_invalid_ports(oauth_client: BasicClient) {
+    fn build_struct_with_invalid_ports() {
         let port = 26;
-        let builder = CliOAuthBuilder::new(oauth_client).port(port);
+        let builder = CliOAuthBuilder::new().port(port);
         let res = builder.build();
         let error = res.expect_err("error should be returned");
         assert_eq!(
@@ -281,11 +246,11 @@ mod tests {
     }
 
     #[rstest]
-    fn build_struct_with_unavailable_ports(oauth_client: BasicClient) {
+    fn build_struct_with_unavailable_ports() {
         let (test_port, open_port) = next_ports(1);
         let _socket =
             TcpListener::bind(SocketAddr::new(LOCALHOST, open_port)).expect("port is already open");
-        let builder = CliOAuthBuilder::new(oauth_client).port(test_port);
+        let builder = CliOAuthBuilder::new().port(test_port);
         let res = builder.build();
         let error = res.expect_err("error should be returned");
         assert_eq!(

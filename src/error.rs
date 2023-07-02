@@ -40,3 +40,11 @@ pub enum ServerError {
     #[error("no result received")]
     NoResult,
 }
+
+#[derive(Error, Debug)]
+pub enum AuthError {
+    #[error("invalid CSRF token (state parameter)")]
+    CsrfMismatch,
+    #[error("no result received")]
+    NoResult,
+}
