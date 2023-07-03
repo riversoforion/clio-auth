@@ -1,9 +1,11 @@
-use log::{debug, info, warn};
+use clio_auth::AuthContext;
+use log::{debug, error, info, warn};
 use oauth2::basic::BasicClient;
-use oauth2::{AuthUrl, ClientId, TokenUrl};
+use oauth2::reqwest::async_http_client;
+use oauth2::{AuthUrl, ClientId, TokenResponse, TokenUrl};
 
 #[tokio::main]
-async fn main() -> Result<(), String> {
+async fn main() {
     pretty_env_logger::init();
 
     debug!("😃 I'm alive");
@@ -26,10 +28,36 @@ async fn main() -> Result<(), String> {
         Err(e) => warn!("👎 uh oh! {:?}", e),
     };
     match auth.validate() {
-        Ok(_auth_ctx) => info!("👍 auth code is good to go"),
+        Ok(AuthContext {
+            auth_code,
+            pkce_verifier,
+            state: _,
+        }) => {
+            info!("👍 auth code is good to go");
+            let token_result = oauth_client
+                .exchange_code(auth_code)
+                .set_pkce_verifier(pkce_verifier)
+                .request_async(async_http_client)
+                .await;
+            if let Ok(token_result) = token_result {
+                let access_token = token_result.access_token();
+                info!("🔑 access token:\n{}", access_token.secret());
+                info!("🔑 token type: {:?}", token_result.token_type());
+
+                let refresh_token = token_result.refresh_token();
+                if let Some(refresh_token) = refresh_token {
+                    info!("🔑 refresh token:\n{}", refresh_token.secret());
+                } else {
+                    info!("🔒 refresh token not returned");
+                }
+            } else {
+                error!(
+                    "💀 error exchanging auth code: {:?}",
+                    token_result.unwrap_err()
+                );
+            }
+        },
         Err(e) => warn!("👎 uh oh! {:?}", e),
-    }
-    // TODO Exchange auth code for token
+    };
     info!("🏁 finished!");
-    Ok(())
 }

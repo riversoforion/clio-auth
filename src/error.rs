@@ -1,3 +1,4 @@
+use std::io;
 use std::net::IpAddr;
 use std::ops::Range;
 use std::string::FromUtf8Error;
@@ -25,6 +26,8 @@ pub enum ConfigError {
 /// Defines the types of errors that can occur from the internal web server during the OAuth flow.
 #[derive(Error, Debug)]
 pub enum ServerError {
+    #[error("i/o error")]
+    IoError(#[from] io::Error),
     #[error("tokio must be running")]
     AsyncRuntimeRequired(#[from] TryCurrentError),
     #[error("error sending message")]

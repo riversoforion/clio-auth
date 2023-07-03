@@ -20,6 +20,7 @@
 //! [1]: https://www.rfc-editor.org/rfc/rfc7636
 //! [2]: https://crates.io/crates/oauth2
 
+use log::debug;
 use std::fmt::{Debug, Formatter};
 use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::ops::Range;
@@ -64,6 +65,11 @@ impl CliOAuth {
         CliOAuthBuilder::new()
     }
 
+    pub fn redirect_url(&self) -> RedirectUrl {
+        let url = format!("http://{}", self.address);
+        RedirectUrl::from_url(Url::parse(&url).unwrap())
+    }
+
     pub async fn authorize<TE, TR, TT, TIR, RT, TRE>(
         &mut self,
         oauth_client: &oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
@@ -97,8 +103,8 @@ impl CliOAuth {
             self.timeout,
         ));
 
-        // TODO Open browser window to authorization link
-        println!("Authorization URL: {}", auth_url);
+        debug!("🔑 authorization URL: {}", auth_url);
+        open::that(auth_url.as_str())?;
 
         server.await?;
 
@@ -131,11 +137,6 @@ impl CliOAuth {
             Some(_) => Err(AuthError::CsrfMismatch),
             None => Err(AuthError::NoResult),
         }
-    }
-
-    pub fn redirect_url(&self) -> RedirectUrl {
-        let url = format!("http://{}", self.address);
-        RedirectUrl::from_url(Url::parse(&url).unwrap())
     }
 }
 
