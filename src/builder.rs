@@ -1,3 +1,4 @@
+use oauth2::Scope;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::ops::Range;
 
@@ -13,6 +14,7 @@ pub struct CliOAuthBuilder {
     ip_address: IpAddr,
     socket_address: Option<SocketAddr>,
     timeout: u64,
+    scopes: Vec<Scope>,
 }
 
 impl CliOAuthBuilder {
@@ -22,6 +24,7 @@ impl CliOAuthBuilder {
             ip_address: IpAddr::V4(Ipv4Addr::LOCALHOST),
             socket_address: None,
             timeout: DEFAULT_TIMEOUT,
+            scopes: Default::default(),
         }
     }
 
@@ -94,6 +97,21 @@ impl CliOAuthBuilder {
         self
     }
 
+    /// Adds a scope to include with the authorization request.
+    pub fn scope(mut self, scope: Scope) -> Self {
+        self.scopes.push(scope);
+        self
+    }
+
+    /// Adds scopes to include with the authorization request.
+    pub fn scopes<S>(mut self, scopes: S) -> Self
+    where
+        S: IntoIterator<Item = Scope>,
+    {
+        self.scopes.extend(scopes);
+        self
+    }
+
     /// Constructs the [`CliOAuth`] instance with the configuration captured in this builder.
     pub fn build(self) -> ConfigResult<CliOAuth> {
         self.validate()?;
@@ -101,6 +119,7 @@ impl CliOAuthBuilder {
         Ok(CliOAuth {
             address: socket_addr,
             timeout: self.timeout,
+            scopes: self.scopes,
             auth_context: None,
             auth_result: None,
         })
@@ -108,6 +127,7 @@ impl CliOAuthBuilder {
 }
 #[cfg(test)]
 mod tests {
+    use oauth2::Scope;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
     use std::str::FromStr;
 
@@ -220,6 +240,28 @@ mod tests {
     fn set_timeout() {
         let builder = CliOAuthBuilder::new().timeout(120);
         assert_eq!(builder.timeout, 120);
+    }
+
+    #[rstest]
+    fn add_scope() {
+        let builder = CliOAuthBuilder::new().scope(Scope::new(String::from("test_scope")));
+        assert_eq!(builder.scopes, vec![Scope::new(String::from("test_scope"))]);
+    }
+
+    #[rstest]
+    fn add_scopes() {
+        let scopes = vec![
+            Scope::new(String::from("scope:1")),
+            Scope::new(String::from("scope:2")),
+        ];
+        let builder = CliOAuthBuilder::new().scopes(scopes);
+        assert_eq!(
+            builder.scopes,
+            vec![
+                Scope::new(String::from("scope:1")),
+                Scope::new(String::from("scope:2"))
+            ]
+        );
     }
 
     #[rstest]

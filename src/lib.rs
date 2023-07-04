@@ -28,7 +28,7 @@ use std::sync::{Arc, Mutex};
 
 use oauth2::{
     AuthorizationCode, CsrfToken, ErrorResponse, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl,
-    RevocableToken, TokenIntrospectionResponse, TokenResponse, TokenType,
+    RevocableToken, Scope, TokenIntrospectionResponse, TokenResponse, TokenType,
 };
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
@@ -56,6 +56,7 @@ type AuthorizationResultHolder = Arc<Mutex<Option<AuthorizationResult>>>;
 pub struct CliOAuth {
     address: SocketAddr,
     timeout: u64,
+    scopes: Vec<Scope>,
     auth_context: Option<AuthContext>,
     auth_result: Option<AuthorizationResult>,
 }
@@ -82,11 +83,11 @@ impl CliOAuth {
         RT: RevocableToken,
         TRE: ErrorResponse + 'static,
     {
+        let scopes: Vec<Scope> = self.scopes.iter().map(|scope| scope.clone()).collect();
         let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
         let (auth_url, state) = oauth_client
             .authorize_url(CsrfToken::new_random)
-            // This is where we need to set scopes on the request
-            // TODO Add scope configuration to Builder
+            .add_scopes(scopes)
             .set_pkce_challenge(pkce_challenge)
             .url();
         // Create communication channels
