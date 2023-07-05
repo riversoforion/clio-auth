@@ -1,21 +1,109 @@
 //! OAuth 2.0 helper for CLI and desktop applications.
 //!
-//! Facilitates the [OAuth 2.0 Authorization Code with PKCE][1] flow. This package works
-//! hand-in-hand with the [oauth2][2] crate.
+//! This package facilitates the [OAuth 2.0 Authorization Code with PKCE][1] flow for command line
+//! and desktop GUI applications. This package works hand-in-hand with the [oauth2][2] crate by providing the "missing
+//! pieces" for the flow: a web server to handle the authorization callback, and opening the browser with the
+//! authorization link.
 //!
 //! # Usage
 //!
 //! General usage is as follows:
 //!
+//! 1. Configure and build a [`CliOAuthBuilder`]
 //! 1. Configure an [`oauth2::Client`]
-//! 1. Configure a [`CliOAuthBuilder`]
-//! 1. Build and start the [`CliOAuth`]
-//! 1. Await the token result
+//! 1. Start the [authorization flow](CliOAuth::authorize)
+//! 1. [Validate and obtain](CliOAuth::validate) the authorization code
+//! 1. [Exchange the code](oauth2::Client::exchange_code) for a token
 //!
 //! # Examples
 //!
-//! _TODO: Examples for creating the oauth2 client, configuring the builder, starting the server,
-//! and awaiting the token._
+//! This example is adapted directly from the [`oauth2`] package documentation ("Asynchronous API"),
+//! and demonstrates how `CliOAuth` fills in the gaps.
+//!
+//! ```no_run
+//! use anyhow;
+//! use oauth2::{
+//!     AuthorizationCode,
+//!     AuthUrl,
+//!     ClientId,
+//!     ClientSecret,
+//!     CsrfToken,
+//!     PkceCodeChallenge,
+//!     RedirectUrl,
+//!     Scope,
+//!     TokenResponse,
+//!     TokenUrl
+//! };
+//! use oauth2::basic::BasicClient;
+//! # #[cfg(feature = "reqwest")]
+//! use oauth2::reqwest::async_http_client;
+//! use url::Url;
+//!
+//! # #[cfg(feature = "reqwest")]
+//! # async fn err_wrapper() -> Result<(), anyhow::Error> {
+//! // CliOAuth: Build helper with default options
+//! let mut auth = clio_auth::CliOAuth::builder().build().unwrap();        // (1)
+//! // Create an OAuth2 client by specifying the client ID, client secret, authorization URL and
+//! // token URL.
+//! let client =
+//!     BasicClient::new(
+//!         ClientId::new("client_id".to_string()),
+//!         Some(ClientSecret::new("client_secret".to_string())),
+//!         AuthUrl::new("http://authorize".to_string())?,
+//!         Some(TokenUrl::new("http://token".to_string())?)
+//!     )
+//!     // CliOAuth: Use the local redirect URL
+//!     .set_redirect_uri(auth.redirect_url());                           // (2)
+//!
+//! // CliOAuth: The PKCE challenge is handled internally. Just authorize... (3)
+//! match auth.authorize(&oauth_client).await {
+//!     Ok(()) => info!("authorized successfully"),
+//!     Err(e) => warn!("uh oh! {:?}", e),
+//! };
+//! // CliOAuth: The browser is opened to the authorization URL              (3)
+//!
+//! // Once the user has been redirected to the redirect URL, you'll have access to the
+//! // authorization code. For security reasons, your code should verify that the `state`
+//! // parameter returned by the server matches `csrf_state`.
+//! // CliOAuth: Validation must be performed to acquire the authorization code
+//! match auth.validate() {                                              // (4)
+//!     Ok(AuthContext {
+//!         auth_code,
+//!         pkce_verifier,
+//!         state: _,
+//!     }) => {
+//!         // Now you can trade it for an access token.
+//!         let token_result = client
+//!             .exchange_code(auth_code)                                // (5)
+//!             // Set the PKCE code verifier.
+//!             .set_pkce_verifier(pkce_verifier)
+//!             .request_async(async_http_client)
+//!             .await?;
+//!         // Unwrapping token_result will either produce a Token or a RequestTokenError.
+//!     },
+//!     Err(e) => warn!("uh oh! {:?}", e),
+//! }
+//!
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Let's break down the numbered comments:
+//! 1. `CliOAuth` construction starts with a [builder](CliOAuthBuilder), which allows you to
+//! customize the way the authorization helper is configured.
+//! 2. `CliOAuth` constructs the authorization URL based on the address & port it is running on. The
+//! URL is provided to the [`oauth2::Client`] during construction.
+//! 3. Invoking the [`CliOAuth::authorize`] method will do the following things:
+//!    - Launch a local web server
+//!    - Generate the CSRF protection token (`state` parameter)
+//!    - Open the user's browser with the URL to initiate the authorization flow
+//!    - Receive the incoming authorization code
+//!    - Shutdown the local web server
+//! 4. Invoking the [`CliOAuth::validate`] method will verify that an auth code was received and
+//! that the `state` parameter matches the expected value. If validation succeeds, the auth code and
+//! PKCE verifier will be returned to the caller.
+//! 5. The auth code and PKCE verifier are provided to the
+//! [exchange code](oauth2::Client::exchange_code) flow.
 //!
 //! [1]: https://www.rfc-editor.org/rfc/rfc7636
 //! [2]: https://crates.io/crates/oauth2
@@ -34,11 +122,9 @@ use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use url::Url;
 
-use crate::builder::CliOAuthBuilder;
-
-use crate::error::ServerError;
+pub use crate::builder::CliOAuthBuilder;
 use crate::error::ServerError::NoResult;
-use crate::error::{AuthError, ConfigError};
+pub use crate::error::{AuthError, ConfigError, ServerError};
 use crate::server::launch;
 use crate::ConfigError::CannotBindAddress;
 
@@ -48,7 +134,6 @@ mod server;
 
 /// A shortcut [`Result`] using an error of [`ConfigError`].
 pub type ConfigResult<T> = Result<T, ConfigError>;
-/// A shortcut [`Result`] using an error of [`ServerError`].
 type AuthorizationResultHolder = Arc<Mutex<Option<AuthorizationResult>>>;
 
 /// The CLI OAuth helper.
@@ -62,15 +147,30 @@ pub struct CliOAuth {
 }
 
 impl CliOAuth {
+    /// Constructs a new builder struct for configuration.
     pub fn builder() -> CliOAuthBuilder {
         CliOAuthBuilder::new()
     }
 
+    /// Generates the redirect URL that will sent in the authorization URL to the identity
+    /// provider.
+    ///
+    /// Pass the result of this method to [`oauth2::Client::set_redirect_uri`] while building the
+    /// client.
     pub fn redirect_url(&self) -> RedirectUrl {
         let url = format!("http://{}", self.address);
         RedirectUrl::from_url(Url::parse(&url).unwrap())
     }
 
+    /// Initiates the Authorization Code flow.
+    ///
+    /// The PKCE challenge and verifier are generated. The challenge is used in the authorization
+    /// URL, and the verifier is saved for the validation step.
+    ///
+    /// The authorization URL is then opened in the user's browser, and the redirect request is
+    /// handled by recording the authorization code (`code`) and CSRF token (`state`). These values
+    /// will also be used in the validation step, and then returned to the caller for the token
+    /// exchange.
     pub async fn authorize<TE, TR, TT, TIR, RT, TRE>(
         &mut self,
         oauth_client: &oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
@@ -131,20 +231,37 @@ impl CliOAuth {
         Ok(())
     }
 
+    /// Validates the authorization code and CSRF token (`state`).
+    ///
+    /// If validation is successful, then the code and PKCE verifier are returned to the caller in
+    /// order to build the [exchange code](oauth2::Client::exchange_code) request.
+    ///
+    /// This method *must* be called after [`CliOAuth::authorize`] completes successfully.
     pub fn validate(&mut self) -> Result<AuthContext, AuthError> {
-        let expected_state = self.auth_result.take().ok_or(AuthError::NoResult)?.state;
+        let expected_state = self
+            .auth_result
+            .take()
+            .ok_or(AuthError::InvalidAuthState)?
+            .state;
         match self.auth_context.take() {
             Some(auth_ctx) if auth_ctx.state.secret() == &expected_state => Ok(auth_ctx),
             Some(_) => Err(AuthError::CsrfMismatch),
-            None => Err(AuthError::NoResult),
+            None => Err(AuthError::InvalidAuthState),
         }
     }
 }
 
+/// Holds intermediate values needed to complete the authorization flow.
+///
+/// These values are generated during the [authorize](CliOAuth::authorize) step, and
+/// provided to the caller after [validation](CliOAuth::validate). They can then be used for the
+/// [code exchange](oauth2::Client::exchange_code).
 #[derive(Debug)]
 pub struct AuthContext {
+    /// The authorization code obtained from the Authorize step.
     pub auth_code: AuthorizationCode,
     pub state: CsrfToken,
+    /// The PKCE verifier that will be supplied to the Exchange Code step.
     pub pkce_verifier: PkceCodeVerifier,
 }
 
@@ -169,11 +286,18 @@ const DEFAULT_PORT_MIN: u16 = 3456;
 const DEFAULT_PORT_MAX: u16 = DEFAULT_PORT_MIN + 10;
 const DEFAULT_TIMEOUT: u64 = 60;
 
+/// Finds an available port within the give range.
+///
+/// Each port will be tried in ascending order. The first port that can successfully bind will be
+/// used, and the resulting socket address will be returned. An error will be returned if no ports
+/// in the range are available.
+///
+/// Note that this function **cannot guarantee** that the address/port combination will be usable by
+/// the server, since any other process on the system could bind to it before this process does.
 fn find_available_port(ip_addr: IpAddr, port_range: Range<u16>) -> ConfigResult<SocketAddr> {
     for port in port_range.clone() {
         let socket_addr = SocketAddr::new(ip_addr, port);
-        let bind_res = TcpListener::bind(socket_addr);
-        if bind_res.is_ok() {
+        if is_address_available(socket_addr) {
             return Ok(socket_addr);
         }
     }
@@ -183,6 +307,7 @@ fn find_available_port(ip_addr: IpAddr, port_range: Range<u16>) -> ConfigResult<
     })
 }
 
+/// Checks whether the given socket address is available for this process to use.
 fn is_address_available(socket_addr: SocketAddr) -> bool {
     match TcpListener::bind(socket_addr) {
         Ok(_) => true,
@@ -264,4 +389,6 @@ mod tests {
         let address = SocketAddr::new(LOCALHOST, test_port);
         assert!(!is_address_available(address));
     }
+
+    mod cli_oauth {}
 }

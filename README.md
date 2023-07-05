@@ -20,7 +20,8 @@ struct, but not interfere with its normal usage.
 - [x] Launch an asynchronous web server to handle the auth code request
   - [x] Bind the server to any local address and non-privileged port
   - [x] Scan for a range of ports to find the first open one
-- [ ] Open the user's browser to begin the authorization flow
+- [x] Open the user's browser to begin the authorization flow
+- [x] Validate the authorization result and make it available for a code exchange
 - [ ] Customize the server responses in the browser
   - [ ] Successful authorization
   - [ ] Authorization error

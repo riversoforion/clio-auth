@@ -125,6 +125,7 @@ impl CliOAuthBuilder {
         })
     }
 }
+
 #[cfg(test)]
 mod tests {
     use oauth2::Scope;
@@ -167,7 +168,7 @@ mod tests {
         let error = builder.validate().expect_err("Port should be invalid");
         assert_eq!(
             format!("{error}"),
-            format!("invalid server config (expected port >= 1024, found {port})")
+            format!("Invalid server config (expected port >= 1024, found {port})")
         );
     }
 
@@ -190,7 +191,7 @@ mod tests {
             .expect_err("Port range should be invalid");
         assert_eq!(
             format!("{error}"),
-            format!("invalid server config (expected port >= 1024, found {lower_port})")
+            format!("Invalid server config (expected port >= 1024, found {lower_port})")
         );
     }
 
@@ -283,7 +284,7 @@ mod tests {
         let error = res.expect_err("error should be returned");
         assert_eq!(
             format!("{error}"),
-            format!("invalid server config (expected port >= 1024, found {port})")
+            format!("Invalid server config (expected port >= 1024, found {port})")
         );
     }
 
@@ -297,7 +298,7 @@ mod tests {
         let error = res.expect_err("error should be returned");
         assert_eq!(
             format!("{error}"),
-            format!("cannot bind to 127.0.0.1 on any port from {test_port}-{test_port}")
+            format!("Cannot bind to 127.0.0.1 on any port from {test_port}-{test_port}")
         );
     }
 }

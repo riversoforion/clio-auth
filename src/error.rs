@@ -13,10 +13,10 @@ use tokio::task::JoinError;
 #[derive(Error, Debug)]
 pub enum ConfigError {
     /// Indicates that the web server parameters were not correct.
-    #[error("invalid server config (expected {expected}, found {found})")]
+    #[error("Invalid server config (expected {expected}, found {found})")]
     InvalidServerConfig { expected: String, found: String },
     /// Indicates that the configured address and port were not available to listen on.
-    #[error("cannot bind to {addr} on any port from {}-{}", port_range.start, port_range.end - 1)]
+    #[error("Cannot bind to {addr} on any port from {}-{}", port_range.start, port_range.end - 1)]
     CannotBindAddress {
         addr: IpAddr,
         port_range: Range<u16>,
@@ -26,28 +26,34 @@ pub enum ConfigError {
 /// Defines the types of errors that can occur from the internal web server during the OAuth flow.
 #[derive(Error, Debug)]
 pub enum ServerError {
-    #[error("i/o error")]
+    #[error("I/O error")]
     IoError(#[from] io::Error),
-    #[error("tokio must be running")]
+    /// Indicates that a Tokio runtime could not be found
+    #[error("Tokio must be running")]
     AsyncRuntimeRequired(#[from] TryCurrentError),
-    #[error("error sending message")]
-    SendError(#[from] mpsc::error::SendError<ServerControl>),
-    #[error("server startup failed")]
-    StartupFailed,
-    #[error("server error")]
-    ServerError(#[from] JoinError),
-    #[error("request error")]
+    /// Indicates an error sending a signal to the internal server
+    #[error("Error signaling server")]
+    InternalCommError(#[from] mpsc::error::SendError<ServerControl>),
+    /// Indicates a problem running the server
+    #[error("Internal server error")]
+    InternalServerError(#[from] JoinError),
+    #[error("Request error")]
     RequestError(#[from] hyper::Error),
-    #[error("encoding error")]
+    #[error("Encoding error")]
     EncodingError(#[from] FromUtf8Error),
-    #[error("no result received")]
+    /// No authorization code was received
+    #[error("No authorization code received")]
     NoResult,
 }
 
+/// Defines the types of errors that can occur during the authorization flow.
 #[derive(Error, Debug)]
 pub enum AuthError {
-    #[error("invalid CSRF token (state parameter)")]
+    /// Invalid CSRF token (state parameter). Indicates a possible replay attack.
+    #[error("Invalid CSRF token (state parameter)")]
     CsrfMismatch,
-    #[error("no result received")]
-    NoResult,
+    /// No authorization code or PKCE verifier present. Might indicate that `validate` was invoked
+    /// without a successful call to `authorize`.
+    #[error("No authorization code or PKCE verifier present")]
+    InvalidAuthState,
 }
