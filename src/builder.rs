@@ -1,6 +1,5 @@
 use oauth2::Scope;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::ops::Range;
 
 use crate::ConfigError::{CannotBindAddress, InvalidServerConfig};
 use crate::*;
@@ -10,7 +9,7 @@ use crate::*;
 /// Not constructed directly. See [`CliOAuth::builder()`].
 #[derive(Debug)]
 pub struct CliOAuthBuilder {
-    port_range: Range<u16>,
+    port_range: PortRange,
     ip_address: IpAddr,
     socket_address: Option<SocketAddr>,
     timeout: u64,
@@ -63,7 +62,7 @@ impl CliOAuthBuilder {
     /// first open one will be used.
     ///
     /// The default range is `3456..3465`.
-    pub fn port_range(mut self, ports: Range<u16>) -> Self {
+    pub fn port_range(mut self, ports: PortRange) -> Self {
         self.port_range = ports;
         self
     }

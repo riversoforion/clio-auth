@@ -132,6 +132,7 @@ mod builder;
 mod error;
 mod server;
 
+pub(crate) type PortRange = Range<u16>;
 /// A shortcut [`Result`] using an error of [`ConfigError`].
 pub type ConfigResult<T> = Result<T, ConfigError>;
 type AuthorizationResultHolder = Arc<Mutex<Option<AuthorizationResult>>>;
@@ -294,7 +295,7 @@ const DEFAULT_TIMEOUT: u64 = 60;
 ///
 /// Note that this function **cannot guarantee** that the address/port combination will be usable by
 /// the server, since any other process on the system could bind to it before this process does.
-fn find_available_port(ip_addr: IpAddr, port_range: Range<u16>) -> ConfigResult<SocketAddr> {
+fn find_available_port(ip_addr: IpAddr, port_range: PortRange) -> ConfigResult<SocketAddr> {
     for port in port_range.clone() {
         let socket_addr = SocketAddr::new(ip_addr, port);
         if is_address_available(socket_addr) {
@@ -328,14 +329,14 @@ mod tests {
     use std::sync::atomic::AtomicU16;
     use std::sync::atomic::Ordering::AcqRel;
 
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
 
-    use crate::{find_available_port, is_address_available};
+    use crate::{find_available_port, is_address_available, PortRange};
 
     pub(crate) static LOCALHOST: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
     pub(crate) static PORT_GENERATOR: AtomicU16 = AtomicU16::new(8000);
 
-    /// Acquires a range of ports for a test.
+    /// Acquires a range of port numbers for a test.
     ///
     /// Any test that needs to perform testing with network ports should call this method at the
     /// beginning to get the next start and end ports for the test:
@@ -352,43 +353,130 @@ mod tests {
         (start, end)
     }
 
+    /// Acquires a range of port numbers for a test.
+    ///
+    /// This is an alternative to [`next_ports`].
+    pub(crate) fn port_range(count: u16) -> PortRange {
+        let (start, end) = next_ports(count);
+        start..end
+    }
+
+    #[fixture]
+    fn one_port() -> PortRange {
+        port_range(1)
+    }
+
+    #[fixture]
+    fn two_ports() -> PortRange {
+        port_range(2)
+    }
+
+    #[fixture]
+    fn three_ports() -> PortRange {
+        port_range(3)
+    }
+
     #[rstest]
-    fn find_available_port_with_open_port() {
-        let (port_start, port_end) = next_ports(3);
-        let res = find_available_port(LOCALHOST, port_start..port_end);
+    fn find_available_port_with_open_port(three_ports: PortRange) {
+        let res = find_available_port(LOCALHOST, three_ports.clone());
         match res {
-            Ok(addr) => assert!((port_start..port_end).contains(&addr.port())),
+            Ok(addr) => assert!(three_ports.contains(&addr.port())),
             Err(e) => panic!("error finding available port: {:?}", e),
         }
     }
 
     #[rstest]
-    fn find_available_port_with_no_open_port() {
-        let (port_start, port_end) = next_ports(2);
+    fn find_available_port_with_no_open_port(two_ports: PortRange) {
         // Acquire sockets on both ports we need
-        let _s1 = TcpListener::bind(SocketAddr::new(LOCALHOST, port_start)).unwrap();
-        let _s2 = TcpListener::bind(SocketAddr::new(LOCALHOST, port_end)).unwrap();
-        let res = find_available_port(LOCALHOST, port_start..port_end);
+        let _s1 = TcpListener::bind(SocketAddr::new(LOCALHOST, two_ports.start)).unwrap();
+        let _s2 = TcpListener::bind(SocketAddr::new(LOCALHOST, two_ports.end)).unwrap();
+        let res = find_available_port(LOCALHOST, two_ports);
         res.expect_err("ports should not be available");
     }
 
     #[rstest]
-    fn check_address_is_available_when_port_is_open() {
-        let (test_port, open_port) = next_ports(2);
-        let _sock = TcpListener::bind(SocketAddr::new(LOCALHOST, open_port))
+    fn check_address_is_available_when_port_is_open(two_ports: PortRange) {
+        let _sock = TcpListener::bind(SocketAddr::new(LOCALHOST, two_ports.end))
             .expect("control port {open_port} is already open");
-        let address = SocketAddr::new(LOCALHOST, test_port);
+        let address = SocketAddr::new(LOCALHOST, two_ports.start);
         assert!(is_address_available(address));
     }
 
     #[rstest]
-    fn check_address_is_not_available_when_port_is_used() {
-        let (test_port, open_port) = next_ports(1);
-        let _socket =
-            TcpListener::bind(SocketAddr::new(LOCALHOST, open_port)).expect("port is already open");
-        let address = SocketAddr::new(LOCALHOST, test_port);
+    fn check_address_is_not_available_when_port_is_used(one_port: PortRange) {
+        let _socket = TcpListener::bind(SocketAddr::new(LOCALHOST, one_port.end)).expect(
+            "port is already \
+            open",
+        );
+        let address = SocketAddr::new(LOCALHOST, one_port.start);
         assert!(!is_address_available(address));
     }
 
-    mod cli_oauth {}
+    mod cli_oauth {
+        use crate::{AuthContext, AuthError, AuthorizationResult, CliOAuth};
+        use oauth2::{AuthorizationCode, CsrfToken, PkceCodeVerifier};
+        use rstest::{fixture, rstest};
+
+        #[fixture]
+        fn auth() -> CliOAuth {
+            CliOAuth {
+                address: ([127, 0, 0, 1], 8080).into(),
+                timeout: 30,
+                scopes: vec![],
+                auth_context: None,
+                auth_result: None,
+            }
+        }
+
+        #[fixture]
+        fn auth_context() -> AuthContext {
+            AuthContext {
+                state: CsrfToken::new(String::from("state")),
+                auth_code: AuthorizationCode::new(String::from("code")),
+                pkce_verifier: PkceCodeVerifier::new(String::from("pkce")),
+            }
+        }
+
+        #[fixture]
+        fn auth_result() -> AuthorizationResult {
+            AuthorizationResult {
+                auth_code: String::from("code"),
+                state: String::from("state"),
+            }
+        }
+
+        #[rstest]
+        fn redirect_url_valid(auth: CliOAuth) {
+            let url = auth.redirect_url();
+            assert_eq!("http://127.0.0.1:8080/", url.as_str());
+        }
+
+        #[rstest]
+        fn validate_with_no_context(mut auth: CliOAuth, auth_result: AuthorizationResult) {
+            auth.auth_result = Some(auth_result);
+            assert!(auth.validate().is_err());
+        }
+
+        #[rstest]
+        fn validate_with_no_result(mut auth: CliOAuth, auth_context: AuthContext) {
+            auth.auth_context = Some(auth_context);
+            assert!(auth.validate().is_err());
+        }
+
+        #[rstest]
+        fn validate_state_mismatch(
+            mut auth: CliOAuth,
+            mut auth_result: AuthorizationResult,
+            auth_context: AuthContext,
+        ) {
+            auth_result.state = String::from("other_state");
+            auth.auth_result = Some(auth_result);
+            auth.auth_context = Some(auth_context);
+            match auth.validate() {
+                Err(AuthError::CsrfMismatch) => (),
+                Err(e) => panic!("CsrfMismatch error should be raised, but was {:?}", e),
+                Ok(_) => panic!("Validation should fail"),
+            };
+        }
+    }
 }

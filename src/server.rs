@@ -3,13 +3,14 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::error::ServerError;
-use crate::{AuthorizationResult, AuthorizationResultHolder};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use log::{debug, error, info};
 use tokio::sync::mpsc;
 use tokio::time;
+
+use crate::error::ServerError;
+use crate::{AuthorizationResult, AuthorizationResultHolder};
 
 #[derive(Debug)]
 pub enum ServerControl {
@@ -137,4 +138,44 @@ async fn shutdown_signal(mut control_receiver: mpsc::Receiver<ServerControl>, ti
     });
     let _ = timeout.await;
     info!("🛑 shutting down server...");
+}
+
+#[cfg(test)]
+mod tests {
+    use hyper::{Body, Request, Uri};
+
+    use crate::server::extract_auth_params;
+
+    #[test]
+    fn extract_auth_params_valid() {
+        let req = Request::builder()
+            .uri(Uri::from_static(
+                "https://auth.example.com/authorize?code=abcdef&state=12345&other=whatever",
+            ))
+            .body(Body::empty())
+            .unwrap();
+        assert!(extract_auth_params(&req).is_some());
+    }
+
+    #[test]
+    fn extract_auth_params_missing_code() {
+        let req = Request::builder()
+            .uri(Uri::from_static(
+                "https://auth.example.com/authorize?state=12345&other=whatever",
+            ))
+            .body(Body::empty())
+            .unwrap();
+        assert!(extract_auth_params(&req).is_none());
+    }
+
+    #[test]
+    fn extract_auth_params_missing_state() {
+        let req = Request::builder()
+            .uri(Uri::from_static(
+                "https://auth.example.com/authorize?code=abcdef&other=whatever",
+            ))
+            .body(Body::empty())
+            .unwrap();
+        assert!(extract_auth_params(&req).is_none());
+    }
 }
