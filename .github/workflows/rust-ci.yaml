@@ -1,10 +1,10 @@
-name: Rust
+name: Build and Test
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
+    types: [opened, synchronize, reopened]
 
 env:
   CARGO_TERM_COLOR: always
