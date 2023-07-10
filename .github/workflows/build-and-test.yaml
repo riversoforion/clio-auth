@@ -38,16 +38,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+      - name: Install Tarpaulin
+        run: cargo install tarpaulin
 
-      - name: Run tests with coverage
-        uses: actions-rs/tarpaulin@v0.1
-        with:
-          version: '0.26.1'
+      - name: Run code coverage analysis
+        run: cargo test
 
       - name: Upload coverage to codecov.io
         uses: codecov/codecov-action@v1.0.2
