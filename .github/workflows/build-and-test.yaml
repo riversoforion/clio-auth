@@ -35,6 +35,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
@@ -46,7 +48,6 @@ jobs:
         uses: actions-rs/tarpaulin@v0.1
         with:
           version: '0.26.1'
-          args: '-- --test-threads 1'
 
       - name: Upload coverage to codecov.io
         uses: codecov/codecov-action@v1.0.2
