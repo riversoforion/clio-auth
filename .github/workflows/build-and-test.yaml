@@ -22,11 +22,11 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Run tests
-        if: $vars.ACTIONS_STEP_DEBUG != 'true'
+        if: ${{ vars.ACTIONS_STEP_DEBUG != 'true' }}
         run: cargo test
 
       - name: Run tests (debug)
-        if: $vars.ACTIONS_STEP_DEBUG == 'true'
+        if: ${{ vars.ACTIONS_STEP_DEBUG == 'true' }}
         run: cargo test --verbose
 
   coverage:
@@ -51,7 +51,7 @@ jobs:
       - name: Upload coverage to codecov.io
         uses: codecov/codecov-action@v1.0.2
         with:
-          token: ${{secrets.CODECOV_TOKEN}}
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Archive code coverage results
         uses: actions/upload-artifact@v1
