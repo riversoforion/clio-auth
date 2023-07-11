@@ -46,7 +46,7 @@ jobs:
           cargo fmt --check
           cargo clippy --all-targets --all-features
 
-      - name: Run code coverage analysis
+      - name: Analyze code coverage
         run: cargo tarpaulin
 
       - name: Upload coverage to codecov.io
