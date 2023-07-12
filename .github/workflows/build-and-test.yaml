@@ -11,6 +11,8 @@ env:
 
 jobs:
   build:
+    if: ${{ !github.event.act }}
+
     strategy:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
@@ -38,12 +40,26 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          default: true
+          components: rustfmt, clippy
+
       - name: Install Tarpaulin
         run: cargo install cargo-tarpaulin
 
+      - name: Rust version
+        run: |
+          rustup --version && cargo --version && cargo fmt --version && cargo clippy --version && \
+            cargo tarpaulin --version
+
       - name: Lint and format
         run: |
-          cargo fmt --check
+          cargo fmt --check --verbose
           cargo clippy --all-targets --all-features
 
       - name: Analyze code coverage
