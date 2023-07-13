@@ -3,13 +3,14 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::error::ServerError;
-use crate::{AuthorizationResult, AuthorizationResultHolder};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use log::{debug, error, info};
 use tokio::sync::mpsc;
 use tokio::time;
+
+use crate::error::ServerError;
+use crate::{AuthorizationResult, AuthorizationResultHolder};
 
 #[derive(Debug)]
 pub enum ServerControl {
@@ -68,7 +69,7 @@ async fn handle_request(
                 .header("Connection", "close")
                 .body(body)
                 .unwrap()
-        },
+        }
         None => Response::builder()
             .status(400)
             .header("Connection", "close")
