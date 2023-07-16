@@ -1,6 +1,6 @@
 # CliOAuth
 
-CliOAuth (pronounced _"klee-oh-awth"_) is a utility to assist CLI/desktop application developers with implementing the 
+CliOAuth (pronounced _"klee-oh-awth"_) is a utility to assist CLI/desktop application developers with implementing the
 OAuth 2.0 [Authorization Code flow with PKCE][1].
 
 > _To learn more about Auth Code w/ PKCE, Auth0 has a [good tutorial][2]._
