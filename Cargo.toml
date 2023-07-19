@@ -1,7 +1,13 @@
 [package]
 name = "clio-auth"
+description = "OAuth 2.0 helper library for CLI and desktop applications"
+authors = ["Eric McIntyre <mac@riversoforion.com>"]
+license = "MIT"
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/riversoforion/clio-auth"
+documentation = "https://docs.rs/clio-auth"
+keywords = ["auth", "oauth2", "cli", "desktop"]
 
 [dependencies]
 log = "0.4"
