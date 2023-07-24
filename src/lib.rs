@@ -184,7 +184,7 @@ impl CliOAuth {
         RT: RevocableToken,
         TRE: ErrorResponse + 'static,
     {
-        let scopes: Vec<Scope> = self.scopes.iter().map(|scope| scope.clone()).collect();
+        let scopes: Vec<Scope> = self.scopes.to_vec();
         let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
         let (auth_url, state) = oauth_client
             .authorize_url(CsrfToken::new_random)
@@ -198,7 +198,7 @@ impl CliOAuth {
         let handle = Handle::try_current()?;
         let result = AuthorizationResultHolder::new(Mutex::new(None));
         let server = handle.spawn(launch(
-            self.address.clone(),
+            self.address,
             Arc::clone(&result),
             control_sender.clone(),
             control_receiver,
@@ -223,7 +223,7 @@ impl CliOAuth {
         });
 
         let auth_ctx = AuthContext {
-            auth_code: AuthorizationCode::new(String::from(auth_code.clone())),
+            auth_code: AuthorizationCode::new(auth_code.clone()),
             state,
             pkce_verifier,
         };
@@ -310,10 +310,7 @@ fn find_available_port(ip_addr: IpAddr, port_range: PortRange) -> ConfigResult<S
 
 /// Checks whether the given socket address is available for this process to use.
 fn is_address_available(socket_addr: SocketAddr) -> bool {
-    match TcpListener::bind(socket_addr) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    TcpListener::bind(socket_addr).is_ok()
 }
 
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

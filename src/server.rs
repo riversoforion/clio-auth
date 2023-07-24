@@ -80,7 +80,7 @@ async fn handle_request(
 }
 
 fn extract_auth_params(request: &Request<Body>) -> Option<AuthorizationResult> {
-    let params: HashMap<String, String> = query_params(&request);
+    let params: HashMap<String, String> = query_params(request);
     let auth_code = match params.get("code") {
         Some(code) => code.to_owned(),
         None => return None,
@@ -117,7 +117,7 @@ fn build_ok_body() -> Body {
 }
 
 fn build_err_body(details: &str) -> Body {
-    let content = String::from(format!(
+    let content = format!(
         r"
     <html>
         <h1 style='color: red'>Error!</h1>
@@ -125,7 +125,7 @@ fn build_err_body(details: &str) -> Body {
         <p>Details: {details}</p>
     </html>
     ",
-    ));
+    );
     Body::from(content)
 }
 
