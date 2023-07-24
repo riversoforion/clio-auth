@@ -3,11 +3,12 @@ use std::net::IpAddr;
 use std::ops::Range;
 use std::string::FromUtf8Error;
 
-use crate::server::ServerControl;
 use thiserror::Error;
 use tokio::runtime::TryCurrentError;
 use tokio::sync::mpsc;
 use tokio::task::JoinError;
+
+use crate::server::ServerControl;
 
 /// Defines the types of errors that can occur during helper configuration.
 #[derive(Error, Debug)]

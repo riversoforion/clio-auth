@@ -1,14 +1,18 @@
 [package]
 name = "clio-auth"
-version = "0.1.0"
+description = "OAuth 2.0 helper library for CLI and desktop applications"
+authors = ["Eric McIntyre <mac@riversoforion.com>"]
+license = "MIT"
+version = "0.5.0-rc.2"
 edition = "2021"
+repository = "https://github.com/riversoforion/clio-auth"
+documentation = "https://docs.rs/clio-auth"
+keywords = ["auth", "oauth2", "cli", "desktop"]
 
 [dependencies]
 log = "0.4"
 oauth2 = "4.2"
 open = "4.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }
 hyper = { version = "0.14", features = ["full"] }
 url = "2.4"

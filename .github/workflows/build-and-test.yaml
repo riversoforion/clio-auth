@@ -1,0 +1,77 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    if: ${{ !github.event.act }}
+
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    runs-on: ${{matrix.os}}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Run tests
+        if: ${{ vars.ACTIONS_STEP_DEBUG != 'true' }}
+        run: cargo test
+
+      - name: Run tests (debug)
+        if: ${{ vars.ACTIONS_STEP_DEBUG == 'true' }}
+        run: cargo test --verbose
+
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          default: true
+          components: rustfmt, clippy
+
+      - name: Install Tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Rust version
+        run: |
+          rustup --version && cargo --version && cargo fmt --version && cargo clippy --version && \
+            cargo tarpaulin --version
+
+      - name: Lint and format
+        run: |
+          cargo fmt --check --verbose
+          cargo clippy --all-targets --all-features
+
+      - name: Analyze code coverage
+        run: cargo tarpaulin
+
+      - name: Upload coverage to codecov.io
+        uses: codecov/codecov-action@v1.0.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v1
+        with:
+          name: code-coverage-report
+          path: target/tarpaulin/clio-auth-coverage.json

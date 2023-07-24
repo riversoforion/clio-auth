@@ -1,0 +1,45 @@
+name: Publish Release
+
+on:
+  release:
+    types: ["published"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-packages:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    runs-on: ${{matrix.os}}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      # Build artifacts for each platform (preferably preferred packaging)
+      # Save artifacts on release
+
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Push release to crates.io
+      # Push to docs.rs?
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          default: true
+
+      - name: Publish to crates.io
+        uses: actions-rs/cargo@v1
+        with:
+          command: publish
+          args: --no-verify --locked

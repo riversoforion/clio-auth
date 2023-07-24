@@ -1,8 +1,9 @@
-use clio_auth::AuthContext;
 use log::{debug, error, info, warn};
 use oauth2::basic::BasicClient;
 use oauth2::reqwest::async_http_client;
 use oauth2::{AuthUrl, ClientId, TokenResponse, TokenUrl};
+
+use clio_auth::AuthContext;
 
 #[tokio::main]
 async fn main() {
@@ -56,7 +57,7 @@ async fn main() {
                     token_result.unwrap_err()
                 );
             }
-        },
+        }
         Err(e) => warn!("👎 uh oh! {:?}", e),
     };
     info!("🏁 finished!");
