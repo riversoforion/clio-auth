@@ -69,7 +69,7 @@ async fn handle_request(
                 .header("Connection", "close")
                 .body(body)
                 .unwrap()
-        },
+        }
         None => Response::builder()
             .status(400)
             .header("Connection", "close")

@@ -108,12 +108,12 @@
 //! [1]: https://www.rfc-editor.org/rfc/rfc7636
 //! [2]: https://crates.io/crates/oauth2
 
-use log::debug;
 use std::fmt::{Debug, Formatter};
 use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
+use log::debug;
 use oauth2::{
     AuthorizationCode, CsrfToken, ErrorResponse, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl,
     RevocableToken, Scope, TokenIntrospectionResponse, TokenResponse, TokenType,

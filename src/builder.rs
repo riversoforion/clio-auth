@@ -1,5 +1,6 @@
-use oauth2::Scope;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+use oauth2::Scope;
 
 use crate::ConfigError::{CannotBindAddress, InvalidServerConfig};
 use crate::*;
@@ -127,15 +128,16 @@ impl CliOAuthBuilder {
 
 #[cfg(test)]
 mod tests {
-    use oauth2::Scope;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
     use std::str::FromStr;
 
+    use oauth2::Scope;
     use rstest::rstest;
 
-    use super::CliOAuthBuilder;
     use crate::tests::{next_ports, LOCALHOST};
     use crate::{DEFAULT_PORT_MAX, DEFAULT_PORT_MIN, DEFAULT_TIMEOUT, PORT_MIN};
+
+    use super::CliOAuthBuilder;
 
     #[rstest]
     fn all_defaults() {

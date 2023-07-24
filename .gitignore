@@ -1,5 +1,7 @@
 /target
 /Cargo.lock
+# Profiler/coverage output
+default_*.profraw
 
 ## IDEs
 *.iml
