@@ -172,6 +172,7 @@ impl CliOAuth {
     /// handled by recording the authorization code (`code`) and CSRF token (`state`). These values
     /// will also be used in the validation step, and then returned to the caller for the token
     /// exchange.
+    #[cfg(not(tarpaulin_include))]
     pub async fn authorize<TE, TR, TT, TIR, RT, TRE>(
         &mut self,
         oauth_client: &oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
