@@ -1,5 +1,10 @@
 # CliOAuth
 
+![GitHub Build Status](https://img.shields.io/github/actions/workflow/status/riversoforion/clio-auth/build-and-test.yaml?style=for-the-badge&logo=github)
+![Crates.io](https://img.shields.io/crates/l/clio-auth?style=for-the-badge&logo=rust&color=gold)
+![docs.rs](https://img.shields.io/docsrs/clio-auth?style=for-the-badge&logo=docsdotrs&link=https%3A%2F%2Fdocs.rs%2Fclio-auth)
+
+
 CliOAuth (pronounced _"klee-oh-awth"_) is a utility to assist CLI/desktop application developers with implementing the
 OAuth 2.0 [Authorization Code flow with PKCE][1].
 
