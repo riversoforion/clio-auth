@@ -63,7 +63,7 @@ jobs:
           cargo clippy --all-targets --all-features
 
       - name: Analyze code coverage
-        run: cargo tarpaulin
+        run: cargo tarpaulin --out XML
 
       - name: Upload coverage to codecov.io
         uses: codecov/codecov-action@v3

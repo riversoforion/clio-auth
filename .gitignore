@@ -2,6 +2,7 @@
 /Cargo.lock
 # Profiler/coverage output
 default_*.profraw
+cobertura.xml
 
 ## IDEs
 *.iml
