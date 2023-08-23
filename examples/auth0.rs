@@ -13,14 +13,14 @@ async fn main() {
     // Build helper
     let mut auth = clio_auth::CliOAuth::builder().timeout(30).build().unwrap();
     // Configure OAuth struct
-    let client_id = "gc1p9v7obY6fuPFv6nDz8oSVoO6lX4Ia";
-    let auth_url = "https://riversoforion.auth0.com/authorize";
-    let token_url = "https://riversoforion.auth0.com/oauth/token";
+    let client_id = "gc1p9v7obY6fuPFv6nDz8oSVoO6lX4Ia".to_string();
+    let auth_url = "https://riversoforion.auth0.com/authorize".to_string();
+    let token_url = "https://riversoforion.auth0.com/oauth/token".to_string();
     let oauth_client = BasicClient::new(
-        ClientId::new(client_id.to_string()),
+        ClientId::new(client_id),
         None,
-        AuthUrl::new(auth_url.to_string()).unwrap(),
-        Some(TokenUrl::new(token_url.to_string()).unwrap()),
+        AuthUrl::new(auth_url).unwrap(),
+        Some(TokenUrl::new(token_url).unwrap()),
     )
     .set_redirect_uri(auth.redirect_url());
     info!("🟢 starting...");
