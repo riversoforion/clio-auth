@@ -1,9 +1,18 @@
 # CliOAuth
 
-![GitHub Build Status](https://img.shields.io/github/actions/workflow/status/riversoforion/clio-auth/build-and-test.yaml?style=for-the-badge&logo=github)
-![Crates.io](https://img.shields.io/crates/l/clio-auth?style=for-the-badge&logo=rust&color=gold)
-![docs.rs](https://img.shields.io/docsrs/clio-auth?style=for-the-badge&logo=docsdotrs&link=https%3A%2F%2Fdocs.rs%2Fclio-auth)
+[![GitHub Repository][gh-badge]][gh-url]
+[![GitHub Build Status][gh-build-badge]][gh-build-url]
+[![Crates.io][crates-badge]][crates-url]
+[![docs.rs][docs-badge]][docs-url]
 
+[gh-badge]: https://img.shields.io/badge/github-riversoforion%2Fclio--auth-23657d?style=for-the-badge&logo=github
+[gh-url]: https://github.com/riversoforion/clio-auth
+[gh-build-badge]: https://img.shields.io/github/actions/workflow/status/riversoforion/clio-auth/build-and-test.yaml?style=for-the-badge&logo=github
+[gh-build-url]: https://github.com/riversoforion/clio-auth/actions/workflows/build-and-test.yaml
+[crates-badge]: https://img.shields.io/crates/l/clio-auth?style=for-the-badge&logo=rust&color=gold
+[crates-url]: https://crates.io/crates/clio-auth
+[docs-badge]: https://img.shields.io/docsrs/clio-auth?style=for-the-badge&logo=docsdotrs&link=https%3A%2F%2Fdocs.rs%2Fclio-auth
+[docs-url]: https://docs.rs/clio-auth/latest/clio_auth/
 
 CliOAuth (pronounced _"klee-oh-awth"_) is a utility to assist CLI/desktop application developers with implementing the
 OAuth 2.0 [Authorization Code flow with PKCE][1].
