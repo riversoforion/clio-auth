@@ -10,13 +10,13 @@ use tokio::task::JoinError;
 
 use crate::server::ServerControl;
 
-/// Defines the types of errors that can occur during helper configuration.
+/// Errors that can occur during helper configuration.
 #[derive(Error, Debug)]
 pub enum ConfigError {
-    /// Indicates that the web server parameters were not correct.
+    /// Web server parameters were not correct.
     #[error("Invalid server config (expected {expected}, found {found})")]
     InvalidServerConfig { expected: String, found: String },
-    /// Indicates that the configured address and port were not available to listen on.
+    /// The configured address and port were not available to listen on.
     #[error("Cannot bind to {addr} on any port from {}-{}", port_range.start, port_range.end - 1)]
     CannotBindAddress {
         addr: IpAddr,
@@ -24,18 +24,18 @@ pub enum ConfigError {
     },
 }
 
-/// Defines the types of errors that can occur from the internal web server during the OAuth flow.
+/// Errors that can occur from the internal web server during the OAuth flow.
 #[derive(Error, Debug)]
 pub enum ServerError {
     #[error("I/O error")]
     IoError(#[from] io::Error),
-    /// Indicates that a Tokio runtime could not be found
+    /// The Tokio runtime could not be found
     #[error("Tokio must be running")]
     AsyncRuntimeRequired(#[from] TryCurrentError),
-    /// Indicates an error sending a signal to the internal server
+    /// Error sending a signal to the internal server
     #[error("Error signaling server")]
     InternalCommError(#[from] mpsc::error::SendError<ServerControl>),
-    /// Indicates a problem running the server
+    /// Problem occurred running the server
     #[error("Internal server error")]
     InternalServerError(#[from] JoinError),
     #[error("Request error")]
@@ -47,7 +47,7 @@ pub enum ServerError {
     NoResult,
 }
 
-/// Defines the types of errors that can occur during the authorization flow.
+/// Errors that can occur during the authorization flow.
 #[derive(Error, Debug)]
 pub enum AuthError {
     /// Invalid CSRF token (state parameter). Indicates a possible replay attack.

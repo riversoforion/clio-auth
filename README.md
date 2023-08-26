@@ -46,4 +46,12 @@ struct, but not interfere with its normal usage.
 
 ## Usage
 
-_TODO_
+General usage is as follows:
+
+1. Configure a `CliOAuthBuilder` to build a `CliOAuth` helper
+2. Configure an `oauth2::Client`
+3. Start the authorization flow
+4. Validate and obtain the authorization code
+5. Exchange the code for a token
+
+See the [Crate documentation][crates-url] for more details, including an example.

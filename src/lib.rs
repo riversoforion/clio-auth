@@ -1,21 +1,21 @@
 //! OAuth 2.0 helper for CLI and desktop applications.
 //!
 //! This package facilitates the [OAuth 2.0 Authorization Code with PKCE][1] flow for command line
-//! and desktop GUI applications. This package works hand-in-hand with the [oauth2][2] crate by providing the "missing
-//! pieces" for the flow: a web server to handle the authorization callback, and opening the browser with the
-//! authorization link.
+//! and desktop GUI applications. It works hand-in-hand with the [oauth2][2] crate by providing the
+//! "missing pieces" for the flow: a web server to handle the authorization callback, and opening
+//! the browser with the authorization link.
 //!
 //! # Usage
 //!
 //! General usage is as follows:
 //!
-//! 1. Configure and build a [`CliOAuthBuilder`]
+//! 1. Configure a [`CliOAuthBuilder`] and build a [`CliOAuth`] helper
 //! 1. Configure an [`oauth2::Client`]
 //! 1. Start the [authorization flow](CliOAuth::authorize)
 //! 1. [Validate and obtain](CliOAuth::validate) the authorization code
 //! 1. [Exchange the code](oauth2::Client::exchange_code) for a token
 //!
-//! # Examples
+//! # Example
 //!
 //! This example is adapted directly from the [`oauth2`] package documentation ("Asynchronous API"),
 //! and demonstrates how `CliOAuth` fills in the gaps.
@@ -65,7 +65,8 @@
 //! // Once the user has been redirected to the redirect URL, you'll have access to the
 //! // authorization code. For security reasons, your code should verify that the `state`
 //! // parameter returned by the server matches `csrf_state`.
-//! // CliOAuth: Validation must be performed to acquire the authorization code
+//! // CliOAuth: Validation must be performed to acquire the authorization code. CliOAuth handles
+//! // the CSRF verification.
 //! match auth.validate() {                                              // (4)
 //!     Ok(AuthContext {
 //!         auth_code,
@@ -88,16 +89,18 @@
 //! # }
 //! ```
 //!
-//! Let's break down the numbered comments:
+//! _Breaking it down..._
+//!
 //! 1. `CliOAuth` construction starts with a [builder](CliOAuthBuilder), which allows you to
-//! customize the way the authorization helper is configured.
+//! customize the way the authorization helper is configured. See the builder doc for more details
+//! about configuration.
 //! 2. `CliOAuth` constructs the authorization URL based on the address & port it is running on. The
 //! URL is provided to the [`oauth2::Client`] during construction.
 //! 3. Invoking the [`CliOAuth::authorize`] method will do the following things:
 //!    - Launch a local web server
 //!    - Generate the CSRF protection token (`state` parameter)
 //!    - Open the user's browser with the URL to initiate the authorization flow
-//!    - Receive the incoming authorization code
+//!    - Receive the redirect from the IdP that contains the incoming authorization code
 //!    - Shutdown the local web server
 //! 4. Invoking the [`CliOAuth::validate`] method will verify that an auth code was received and
 //! that the `state` parameter matches the expected value. If validation succeeds, the auth code and

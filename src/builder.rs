@@ -70,8 +70,8 @@ impl CliOAuthBuilder {
 
     /// Configures the local IP address for the web server to listen on.
     ///
-    /// Address must be configured for the system. The default is "localhost" (`127.0.0.1`), which
-    /// works fine in most cases.
+    /// Address must be valid on the system. The default is "localhost" (`127.0.0.1`), which works
+    /// fine in most cases.
     pub fn ip_address(mut self, ip_address: impl Into<IpAddr>) -> Self {
         self.ip_address = ip_address.into();
         self
@@ -79,8 +79,8 @@ impl CliOAuthBuilder {
 
     /// Configures a socket address (IP address and port) for the web server to listen on.
     ///
-    /// If provided, it overrides the [`Self::ip_address()`], [`Self::port()`], and
-    /// [`Self::port_range()`] settings.
+    /// If provided, it overrides the [`ip_address`][`Self::ip_address()`],
+    /// [`port`][`Self::port()`], and [`port_range`][`Self::port_range()`] settings.
     pub fn socket_address(mut self, address: SocketAddr) -> Self {
         self.socket_address = Some(address);
         self
