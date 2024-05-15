@@ -8,15 +8,16 @@ edition = "2021"
 repository = "https://github.com/riversoforion/clio-auth"
 documentation = "https://docs.rs/clio-auth"
 keywords = ["auth", "oauth2", "cli", "desktop"]
+categories = ["authentication", "command-line-interface"]
 
 [dependencies]
-log = "0.4"
-oauth2 = "4.2"
-open = "4.0"
-tokio = { version = "1", features = ["full"] }
-hyper = { version = "0.14", features = ["full"] }
-url = "2.4"
-thiserror = "1.0"
+log = "0.4.21"
+oauth2 = "4.4.2"
+open = "5.1.2"
+tokio = { version = "1.37.0", features = ["full"] }
+hyper = { version = "0.14.28", features = ["full"] }
+url = "2.5.0"
+thiserror = "1.0.60"
 
 [dev-dependencies]
 rstest = "0.17"

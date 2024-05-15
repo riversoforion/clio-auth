@@ -25,8 +25,8 @@ async fn main() {
     .set_redirect_uri(auth.redirect_url());
     info!("🟢 starting...");
     match auth.authorize(&oauth_client).await {
-        Ok(()) => info!("👍 authorized successfully"),
-        Err(e) => warn!("👎 uh oh! {:?}", e),
+        Ok(()) => info!("✅ authorized successfully"),
+        Err(e) => warn!("⚠️ uh oh! {:?}", e),
     };
     match auth.validate() {
         Ok(AuthContext {
@@ -34,7 +34,7 @@ async fn main() {
             pkce_verifier,
             state: _,
         }) => {
-            info!("👍 auth code is good to go");
+            info!("✅ auth code is good to go");
             let token_result = oauth_client
                 .exchange_code(auth_code)
                 .set_pkce_verifier(pkce_verifier)
@@ -58,7 +58,7 @@ async fn main() {
                 );
             }
         }
-        Err(e) => warn!("👎 uh oh! {:?}", e),
+        Err(e) => warn!("⚠️ uh oh! {:?}", e),
     };
     info!("🏁 finished!");
 }
