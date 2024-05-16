@@ -64,7 +64,7 @@ jobs:
           verbose: ${{ vars.ACTIONS_STEP_DEBUG == 'true' }}
 
       - name: Archive code coverage results
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v4
         with:
           name: code-coverage-report
           path: target/tarpaulin/clio-auth-coverage.json
