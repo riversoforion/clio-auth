@@ -171,10 +171,9 @@ impl CliOAuth {
     /// The PKCE challenge and verifier are generated. The challenge is used in the authorization
     /// URL, and the verifier is saved for the validation step.
     ///
-    /// The authorization URL is then opened in the user's browser, and the redirect request is
-    /// handled by recording the authorization code (`code`) and CSRF token (`state`). These values
-    /// will also be used in the validation step, and then returned to the caller for the token
-    /// exchange.
+    /// The user's browser is then opened to the authorization URL, and the authorization code (`code`) and CSRF token
+    /// (`state`) are extracted from the redirect request and recorded . These values will also be used in the
+    /// validation step, and then returned to the caller for the token exchange.
     #[cfg(not(tarpaulin_include))]
     pub async fn authorize<TE, TR, TT, TIR, RT, TRE>(
         &mut self,

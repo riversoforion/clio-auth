@@ -3,8 +3,13 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Request, Response, Server};
+use http_body_util::{combinators::BoxBody, BodyExt, Full};
+use hyper::{
+    body,
+    body::{Body, Bytes},
+    service::service_fn,
+    Request, Response,
+};
 use log::{debug, error, info};
 use tokio::sync::mpsc;
 use tokio::time;
@@ -27,6 +32,13 @@ pub(crate) async fn launch(
 ) {
     info!("🚀 launching http server...");
     // Create Hyper server
+    // Open socket
+    // Start timer
+    // Loop while waiting for a connection
+    // Wait until we successfully received a token or the timeout passed
+    //   This might be a job for a Tokio select! macro
+
+    /*
     let service_factory = make_service_fn(move |_| {
         let control_sender = control_sender.to_owned();
         let auth_code_holder = Arc::clone(&auth_code_holder);
@@ -48,14 +60,15 @@ pub(crate) async fn launch(
     if let Err(e) = server.await {
         error!("⚠️ server error: {}", e);
     }
+     */
 }
 
 #[cfg(not(tarpaulin_include))]
 async fn handle_request(
-    request: Request<Body>,
+    request: Request<body::Incoming>,
     auth_code_holder: AuthorizationResultHolder,
     control_sender: mpsc::Sender<ServerControl>,
-) -> Result<Response<Body>, ServerError> {
+) -> Result<Response<BoxBody<Bytes, ServerError>>, ServerError> {
     let resp = match extract_auth_params(&request) {
         Some(result) => {
             debug!("🎁 handling authorization result {result:?}");
@@ -81,7 +94,7 @@ async fn handle_request(
     Ok::<_, ServerError>(resp)
 }
 
-fn extract_auth_params(request: &Request<Body>) -> Option<AuthorizationResult> {
+fn extract_auth_params(request: &Request<impl Body>) -> Option<AuthorizationResult> {
     let params: HashMap<String, String> = query_params(request);
     let auth_code = match params.get("code") {
         Some(code) => code.to_owned(),
@@ -94,7 +107,7 @@ fn extract_auth_params(request: &Request<Body>) -> Option<AuthorizationResult> {
     Some(AuthorizationResult { auth_code, state })
 }
 
-fn query_params(request: &Request<Body>) -> HashMap<String, String> {
+fn query_params(request: &Request<impl Body>) -> HashMap<String, String> {
     request
         .uri()
         .query()
@@ -106,7 +119,7 @@ fn query_params(request: &Request<Body>) -> HashMap<String, String> {
         .unwrap_or_else(HashMap::new)
 }
 
-fn build_ok_body() -> Body {
+fn build_ok_body() -> BoxBody<Bytes, ServerError> {
     let content = String::from(
         r"
     <html>
@@ -115,10 +128,12 @@ fn build_ok_body() -> Body {
     </html>
     ",
     );
-    Body::from(content)
+    Full::new(Bytes::from(content))
+        .map_err(|never| match never {})
+        .boxed()
 }
 
-fn build_err_body(details: &str) -> Body {
+fn build_err_body(details: &str) -> BoxBody<Bytes, ServerError> {
     let content = format!(
         r"
     <html>
@@ -128,7 +143,9 @@ fn build_err_body(details: &str) -> Body {
     </html>
     ",
     );
-    Body::from(content)
+    Full::new(Bytes::from(content))
+        .map_err(|never| match never {})
+        .boxed()
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -145,8 +162,8 @@ async fn shutdown_signal(mut control_receiver: mpsc::Receiver<ServerControl>, ti
 
 #[cfg(test)]
 mod tests {
-    use hyper::body::to_bytes;
-    use hyper::{Body, Request, Uri};
+    use http_body_util::{BodyExt, Empty};
+    use hyper::{body::Bytes, Request, Uri};
 
     use crate::server::{build_err_body, build_ok_body, extract_auth_params};
 
@@ -156,7 +173,7 @@ mod tests {
             .uri(Uri::from_static(
                 "https://auth.example.com/authorize?code=abcdef&state=12345&other=whatever",
             ))
-            .body(Body::empty())
+            .body(Empty::<Bytes>::new())
             .unwrap();
         assert!(extract_auth_params(&req).is_some());
     }
@@ -167,7 +184,7 @@ mod tests {
             .uri(Uri::from_static(
                 "https://auth.example.com/authorize?state=12345&other=whatever",
             ))
-            .body(Body::empty())
+            .body(Empty::<Bytes>::new())
             .unwrap();
         assert!(extract_auth_params(&req).is_none());
     }
@@ -178,7 +195,7 @@ mod tests {
             .uri(Uri::from_static(
                 "https://auth.example.com/authorize?code=abcdef&other=whatever",
             ))
-            .body(Body::empty())
+            .body(Empty::<Bytes>::new())
             .unwrap();
         assert!(extract_auth_params(&req).is_none());
     }
@@ -186,7 +203,7 @@ mod tests {
     #[tokio::test]
     async fn build_ok_body_has_success_message() {
         let body = build_ok_body();
-        let content = String::from_utf8(to_bytes(body).await.unwrap().to_vec()).unwrap();
+        let content = String::from_utf8(body.collect().await.unwrap().to_bytes().to_vec()).unwrap();
         assert!(content.contains("Success!"));
         assert!(content.contains("successfully authenticated"));
     }
@@ -194,7 +211,7 @@ mod tests {
     #[tokio::test]
     async fn build_err_body_has_error_message() {
         let body = build_err_body("the problem");
-        let content = String::from_utf8(to_bytes(body).await.unwrap().to_vec()).unwrap();
+        let content = String::from_utf8(body.collect().await.unwrap().to_bytes().to_vec()).unwrap();
         assert!(content.contains("Error!"));
         assert!(content.contains("Details: the problem"));
     }
