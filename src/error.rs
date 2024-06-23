@@ -1,3 +1,5 @@
+use poem::error::ResponseError;
+use poem::http::StatusCode;
 use std::io;
 use std::net::IpAddr;
 use std::ops::Range;
@@ -27,24 +29,32 @@ pub enum ConfigError {
 /// Errors that can occur from the internal web server during the OAuth flow.
 #[derive(Error, Debug)]
 pub enum ServerError {
-    #[error("I/O error")]
-    IoError(#[from] io::Error),
     /// The Tokio runtime could not be found
     #[error("Tokio must be running")]
     AsyncRuntimeRequired(#[from] TryCurrentError),
+    #[error("")]
+    InternalRuntimeError(#[from] JoinError),
     /// Error sending a signal to the internal server
     #[error("Error signaling server")]
     InternalCommError(#[from] mpsc::error::SendError<ServerControl>),
     /// Problem occurred running the server
     #[error("Internal server error")]
-    InternalServerError(#[from] JoinError),
-    #[error("Request error")]
-    RequestError(#[from] hyper::Error),
+    InternalServerError(#[from] io::Error),
     #[error("Encoding error")]
     EncodingError(#[from] FromUtf8Error),
     /// No authorization code was received
     #[error("No authorization code received")]
     NoResult,
+}
+
+impl ResponseError for ServerError {
+    fn status(&self) -> StatusCode {
+        use ServerError::*;
+        match self {
+            EncodingError(_) | NoResult => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
 }
 
 /// Errors that can occur during the authorization flow.

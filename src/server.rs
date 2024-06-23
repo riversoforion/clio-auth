@@ -1,125 +1,112 @@
-use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
-use http_body_util::{combinators::BoxBody, BodyExt, Full};
-use hyper::{
-    body,
-    body::{Body, Bytes},
-    service::service_fn,
-    Request, Response,
-};
 use log::{debug, error, info};
+use poem::error::IntoResult;
+use poem::http::StatusCode;
+use poem::listener::TcpListener;
+use poem::middleware::AddData;
+use poem::web::{Data, Html, Query};
+use poem::{get, handler, EndpointExt, IntoResponse, Route, Server};
+use serde::Deserialize;
 use tokio::sync::mpsc;
-use tokio::time;
+use tokio::sync::mpsc::Sender;
+use tokio::time::sleep;
+use tokio::{select, signal};
 
 use crate::error::ServerError;
+use crate::ServerError::NoResult;
 use crate::{AuthorizationResult, AuthorizationResultHolder};
-
-#[derive(Debug)]
-pub enum ServerControl {
-    Shutdown,
-}
 
 #[cfg(not(tarpaulin_include))]
 pub(crate) async fn launch(
     address: SocketAddr,
-    auth_code_holder: AuthorizationResultHolder,
-    control_sender: mpsc::Sender<ServerControl>,
-    control_receiver: mpsc::Receiver<ServerControl>,
     timeout: u64,
-) {
+) -> Result<AuthorizationResult, ServerError> {
     info!("🚀 launching http server...");
-    // Create Hyper server
-    // Open socket
-    // Start timer
-    // Loop while waiting for a connection
-    // Wait until we successfully received a token or the timeout passed
-    //   This might be a job for a Tokio select! macro
 
-    /*
-    let service_factory = make_service_fn(move |_| {
-        let control_sender = control_sender.to_owned();
-        let auth_code_holder = Arc::clone(&auth_code_holder);
-        async {
-            Ok::<_, hyper::Error>(service_fn(move |req| {
-                handle_request(
-                    req,
-                    Arc::clone(&auth_code_holder),
-                    control_sender.to_owned(),
-                )
-            }))
-        }
-    });
-    let server = Server::bind(&address).serve(service_factory);
-    // Configure graceful shutdown
-    let server = server.with_graceful_shutdown(shutdown_signal(control_receiver, timeout));
+    // Create shared state
+    let auth_code_holder = AuthorizationResultHolder::new(Mutex::new(None));
+    // Create server control queue
+    let (server_control_tx, server_control_rx) = mpsc::channel(1);
+
+    // Create Poem application
+    let app = Route::new()
+        .at("", get(handle_request))
+        .with(AddData::new(auth_code_holder.clone()))
+        .with(AddData::new(server_control_tx));
+    // Start server
+    let timeout = Duration::from_secs(timeout);
+    let server = Server::new(TcpListener::bind(address))
+        .idle_timeout(timeout)
+        .run_with_graceful_shutdown(
+            app,
+            server_control(server_control_rx, timeout),
+            Some(timeout),
+        );
     info!("🏃 server running at http://{}", address);
-    debug!("⏳ waiting for {timeout} seconds");
+    debug!("⏳ waiting for {timeout:?}");
+
     if let Err(e) = server.await {
         error!("⚠️ server error: {}", e);
+        Err(ServerError::InternalServerError(e))
+    } else {
+        let AuthorizationResult {
+            auth_code,
+            state: state_in,
+        } = match &mut *auth_code_holder.lock().unwrap() {
+            Some(auth_result) => auth_result.clone(),
+            None => return Err(NoResult),
+        };
+        Ok(AuthorizationResult {
+            auth_code: auth_code.clone(),
+            state: state_in.clone(),
+        })
     }
-     */
 }
 
 #[cfg(not(tarpaulin_include))]
+#[handler]
 async fn handle_request(
-    request: Request<body::Incoming>,
-    auth_code_holder: AuthorizationResultHolder,
-    control_sender: mpsc::Sender<ServerControl>,
-) -> Result<Response<BoxBody<Bytes, ServerError>>, ServerError> {
-    let resp = match extract_auth_params(&request) {
-        Some(result) => {
-            debug!("🎁 handling authorization result {result:?}");
-            // Artificial scope to unlock the mutex
-            {
-                let mut auth_code = auth_code_holder.lock().unwrap();
-                *auth_code = Some(result);
-            }
-            let body = build_ok_body();
-            debug!("📤 sending shutdown signal");
-            control_sender.send(ServerControl::Shutdown).await?;
-            Response::builder()
-                .header("Connection", "close")
-                .body(body)
-                .unwrap()
-        }
-        None => Response::builder()
-            .status(400)
-            .header("Connection", "close")
-            .body(build_err_body("Authorization code or state not provided"))
-            .unwrap(),
-    };
-    Ok::<_, ServerError>(resp)
+    query_params: Query<AuthCodeQueryParams>,
+    auth_code_data: Data<&AuthorizationResultHolder>,
+    control_sender_data: Data<&Sender<ServerControl>>,
+) -> poem::Result<impl IntoResponse> {
+    let auth_result = extract_auth_params(query_params.0)?;
+    debug!("🎁 handling authorization result {auth_result:?}");
+    // Artificial scope to unlock the mutex
+    {
+        let mut auth_code = auth_code_data.lock().unwrap();
+        *auth_code = Some(auth_result);
+    }
+    let body = build_ok_body();
+    debug!("✉️ sending shutdown signal");
+    if let Err(send_error) = control_sender_data
+        .send(ServerControl::Shutdown(
+            "received authorization code".to_owned(),
+        ))
+        .await
+    {
+        Err(ServerError::from(send_error)).into_result()
+    } else {
+        body.into_result()
+    }
 }
 
-fn extract_auth_params(request: &Request<impl Body>) -> Option<AuthorizationResult> {
-    let params: HashMap<String, String> = query_params(request);
-    let auth_code = match params.get("code") {
-        Some(code) => code.to_owned(),
-        None => return None,
-    };
-    let state = match params.get("state") {
-        Some(state) => state.to_owned(),
-        None => return None,
-    };
-    Some(AuthorizationResult { auth_code, state })
-}
-
-fn query_params(request: &Request<impl Body>) -> HashMap<String, String> {
-    request
-        .uri()
-        .query()
-        .map(|v| {
-            url::form_urlencoded::parse(v.as_bytes())
-                .into_owned()
-                .collect()
+fn extract_auth_params(params: AuthCodeQueryParams) -> poem::Result<AuthorizationResult> {
+    if params.code.is_none() || params.state.is_none() {
+        error!("⚠️ missing authorization code query parameters");
+        Err(NoResult.into())
+    } else {
+        Ok(AuthorizationResult {
+            auth_code: params.code.unwrap(),
+            state: params.state.unwrap(),
         })
-        .unwrap_or_else(HashMap::new)
+    }
 }
 
-fn build_ok_body() -> BoxBody<Bytes, ServerError> {
+fn build_ok_body() -> impl IntoResponse {
     let content = String::from(
         r"
     <html>
@@ -128,12 +115,10 @@ fn build_ok_body() -> BoxBody<Bytes, ServerError> {
     </html>
     ",
     );
-    Full::new(Bytes::from(content))
-        .map_err(|never| match never {})
-        .boxed()
+    Html(content).with_status(StatusCode::OK)
 }
 
-fn build_err_body(details: &str) -> BoxBody<Bytes, ServerError> {
+fn build_err_body(details: &str) -> impl IntoResponse {
     let content = format!(
         r"
     <html>
@@ -143,28 +128,38 @@ fn build_err_body(details: &str) -> BoxBody<Bytes, ServerError> {
     </html>
     ",
     );
-    Full::new(Bytes::from(content))
-        .map_err(|never| match never {})
-        .boxed()
+    Html(content).with_status(StatusCode::UNAUTHORIZED)
 }
 
 #[cfg(not(tarpaulin_include))]
-async fn shutdown_signal(mut control_receiver: mpsc::Receiver<ServerControl>, timeout: u64) {
-    let timeout = time::timeout(Duration::from_secs(timeout), async {
-        match control_receiver.recv().await {
-            Some(_) => debug!("📥 received shutdown signal"),
-            None => debug!("⬇️ channel was dropped"),
-        };
-    });
-    let _ = timeout.await;
+async fn server_control(mut control_receiver: mpsc::Receiver<ServerControl>, timeout: Duration) {
+    select! {
+        msg = control_receiver.recv() => {
+            match msg {
+                Some(_) => debug!("📨 received shutdown message"),
+                None => debug!("⬇️ channel was dropped"),
+            }
+        },
+        _ = sleep(timeout) => debug!("⌛️ server timed out"),
+        _ = signal::ctrl_c() => debug!("🚦 received interrupt signal"),
+    }
     info!("🛑 shutting down server...");
+}
+
+#[derive(Debug)]
+pub enum ServerControl {
+    Shutdown(String),
+}
+
+#[derive(Deserialize)]
+struct AuthCodeQueryParams {
+    code: Option<String>,
+    state: Option<String>,
 }
 
 #[cfg(test)]
 mod tests {
-    use http_body_util::{BodyExt, Empty};
-    use hyper::{body::Bytes, Request, Uri};
-
+    /*
     use crate::server::{build_err_body, build_ok_body, extract_auth_params};
 
     #[test]
@@ -215,4 +210,5 @@ mod tests {
         assert!(content.contains("Error!"));
         assert!(content.contains("Details: the problem"));
     }
+     */
 }
