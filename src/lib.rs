@@ -115,6 +115,7 @@ use std::fmt::{Debug, Formatter};
 use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use log::debug;
 use oauth2::{
@@ -195,7 +196,7 @@ impl CliOAuth {
 
         // Acquire handle to Tokio runtime
         let handle = Handle::try_current()?;
-        let server = handle.spawn(launch(self.address, self.timeout));
+        let server = handle.spawn(launch(self.address, Duration::from_secs(self.timeout)));
 
         debug!("🔑 authorization URL: {}", auth_url);
         open::that(auth_url.as_str())?;

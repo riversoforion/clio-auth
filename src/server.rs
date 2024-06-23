@@ -22,7 +22,7 @@ use crate::{AuthorizationResult, AuthorizationResultHolder};
 #[cfg(not(tarpaulin_include))]
 pub(crate) async fn launch(
     address: SocketAddr,
-    timeout: u64,
+    timeout: Duration,
 ) -> Result<AuthorizationResult, ServerError> {
     info!("🚀 launching http server...");
 
@@ -37,7 +37,6 @@ pub(crate) async fn launch(
         .with(AddData::new(auth_code_holder.clone()))
         .with(AddData::new(server_control_tx));
     // Start server
-    let timeout = Duration::from_secs(timeout);
     let server = Server::new(TcpListener::bind(address))
         .idle_timeout(timeout)
         .run_with_graceful_shutdown(
