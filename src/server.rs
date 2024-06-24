@@ -8,7 +8,7 @@ use poem::http::StatusCode;
 use poem::listener::TcpListener;
 use poem::middleware::AddData;
 use poem::web::{Data, Html, Query};
-use poem::{get, handler, EndpointExt, IntoResponse, Route, Server};
+use poem::{get, handler, EndpointExt, Error, IntoResponse, Route, Server};
 use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
@@ -35,7 +35,8 @@ pub(crate) async fn launch(
     let app = Route::new()
         .at("", get(handle_request))
         .with(AddData::new(auth_code_holder.clone()))
-        .with(AddData::new(server_control_tx));
+        .with(AddData::new(server_control_tx))
+        .catch_all_error(default_error_response);
     // Start server
     let server = Server::new(TcpListener::bind(address))
         .idle_timeout(timeout)
@@ -44,7 +45,7 @@ pub(crate) async fn launch(
             server_control(server_control_rx, timeout),
             Some(timeout),
         );
-    info!("🏃 server running at http://{}", address);
+    info!("🏃 server running at http://{address}");
     debug!("⏳ waiting for {timeout:?}");
 
     if let Err(e) = server.await {
@@ -79,7 +80,7 @@ async fn handle_request(
         let mut auth_code = auth_code_data.lock().unwrap();
         *auth_code = Some(auth_result);
     }
-    let body = build_ok_body();
+    let response = default_ok_response();
     debug!("✉️ sending shutdown signal");
     if let Err(send_error) = control_sender_data
         .send(ServerControl::Shutdown(
@@ -89,7 +90,7 @@ async fn handle_request(
     {
         Err(ServerError::from(send_error)).into_result()
     } else {
-        body.into_result()
+        response.into_result()
     }
 }
 
@@ -105,7 +106,7 @@ fn extract_auth_params(params: AuthCodeQueryParams) -> poem::Result<Authorizatio
     }
 }
 
-fn build_ok_body() -> impl IntoResponse {
+fn default_ok_response() -> impl IntoResponse {
     let content = String::from(
         r"
     <html>
@@ -117,17 +118,17 @@ fn build_ok_body() -> impl IntoResponse {
     Html(content).with_status(StatusCode::OK)
 }
 
-fn build_err_body(details: &str) -> impl IntoResponse {
+async fn default_error_response(error: Error) -> impl IntoResponse {
     let content = format!(
         r"
     <html>
         <h1 style='color: red'>Error!</h1>
         <p>There was an error authenticating. Please try again.</p>
-        <p>Details: {details}</p>
+        <p>Details: {error}</p>
     </html>
     ",
     );
-    Html(content).with_status(StatusCode::UNAUTHORIZED)
+    Html(content).with_status(error.status())
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -158,56 +159,34 @@ struct AuthCodeQueryParams {
 
 #[cfg(test)]
 mod tests {
-    /*
-    use crate::server::{build_err_body, build_ok_body, extract_auth_params};
-
-    #[test]
-    fn extract_auth_params_valid() {
-        let req = Request::builder()
-            .uri(Uri::from_static(
-                "https://auth.example.com/authorize?code=abcdef&state=12345&other=whatever",
-            ))
-            .body(Empty::<Bytes>::new())
-            .unwrap();
-        assert!(extract_auth_params(&req).is_some());
-    }
-
-    #[test]
-    fn extract_auth_params_missing_code() {
-        let req = Request::builder()
-            .uri(Uri::from_static(
-                "https://auth.example.com/authorize?state=12345&other=whatever",
-            ))
-            .body(Empty::<Bytes>::new())
-            .unwrap();
-        assert!(extract_auth_params(&req).is_none());
-    }
-
-    #[test]
-    fn extract_auth_params_missing_state() {
-        let req = Request::builder()
-            .uri(Uri::from_static(
-                "https://auth.example.com/authorize?code=abcdef&other=whatever",
-            ))
-            .body(Empty::<Bytes>::new())
-            .unwrap();
-        assert!(extract_auth_params(&req).is_none());
-    }
+    use crate::server::{default_error_response, default_ok_response};
+    use crate::ServerError;
+    use poem::{Error, IntoResponse};
+    use reqwest::StatusCode;
+    use std::io;
+    use std::io::ErrorKind;
 
     #[tokio::test]
-    async fn build_ok_body_has_success_message() {
-        let body = build_ok_body();
-        let content = String::from_utf8(body.collect().await.unwrap().to_bytes().to_vec()).unwrap();
+    async fn default_ok_response_has_success_message() {
+        let response = default_ok_response().into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body();
+        let content = body.into_string().await.unwrap();
         assert!(content.contains("Success!"));
         assert!(content.contains("successfully authenticated"));
     }
 
     #[tokio::test]
-    async fn build_err_body_has_error_message() {
-        let body = build_err_body("the problem");
-        let content = String::from_utf8(body.collect().await.unwrap().to_bytes().to_vec()).unwrap();
+    async fn default_error_response_has_error_message() {
+        let error = Error::new(
+            ServerError::InternalServerError(io::Error::new(ErrorKind::AddrInUse, "the problem")),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        );
+        let response = default_error_response(error).await.into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = response.into_body();
+        let content = body.into_string().await.unwrap();
         assert!(content.contains("Error!"));
-        assert!(content.contains("Details: the problem"));
+        assert!(content.contains("Details: Internal server error"));
     }
-     */
 }
