@@ -15,6 +15,8 @@ jobs:
     # Anything we publish should've already run tests on multiple platforms, but just double-check
     name: Sanity check code
     runs-on: ubuntu-latest
+    # PRs have their own pipeline, so this is overkill
+    if: env.TRIGGER == 'release'
 
     steps:
       - name: Checkout repository
