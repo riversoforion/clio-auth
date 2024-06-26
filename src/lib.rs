@@ -115,6 +115,7 @@ use std::fmt::{Debug, Formatter};
 use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use log::debug;
 use oauth2::{
@@ -122,11 +123,9 @@ use oauth2::{
     RevocableToken, Scope, TokenIntrospectionResponse, TokenResponse, TokenType,
 };
 use tokio::runtime::Handle;
-use tokio::sync::mpsc;
 use url::Url;
 
 pub use crate::builder::CliOAuthBuilder;
-use crate::error::ServerError::NoResult;
 pub use crate::error::{AuthError, ConfigError, ServerError};
 use crate::server::launch;
 use crate::ConfigError::CannotBindAddress;
@@ -171,10 +170,9 @@ impl CliOAuth {
     /// The PKCE challenge and verifier are generated. The challenge is used in the authorization
     /// URL, and the verifier is saved for the validation step.
     ///
-    /// The authorization URL is then opened in the user's browser, and the redirect request is
-    /// handled by recording the authorization code (`code`) and CSRF token (`state`). These values
-    /// will also be used in the validation step, and then returned to the caller for the token
-    /// exchange.
+    /// The user's browser is then opened to the authorization URL, and the authorization code (`code`) and CSRF token
+    /// (`state`) are extracted from the redirect request and recorded . These values will also be used in the
+    /// validation step, and then returned to the caller for the token exchange.
     #[cfg(not(tarpaulin_include))]
     pub async fn authorize<TE, TR, TT, TIR, RT, TRE>(
         &mut self,
@@ -195,45 +193,29 @@ impl CliOAuth {
             .add_scopes(scopes)
             .set_pkce_challenge(pkce_challenge)
             .url();
-        // Create communication channels
-        let (control_sender, control_receiver) = mpsc::channel(1);
 
         // Acquire handle to Tokio runtime
         let handle = Handle::try_current()?;
-        let result = AuthorizationResultHolder::new(Mutex::new(None));
-        let server = handle.spawn(launch(
-            self.address,
-            Arc::clone(&result),
-            control_sender.clone(),
-            control_receiver,
-            self.timeout,
-        ));
+        let server = handle.spawn(launch(self.address, Duration::from_secs(self.timeout)));
 
         debug!("🔑 authorization URL: {}", auth_url);
         open::that(auth_url.as_str())?;
 
-        server.await?;
+        let result = server.await?;
 
-        let AuthorizationResult {
-            auth_code,
-            state: state_in,
-        } = match &mut *result.lock().unwrap() {
-            Some(auth_result) => auth_result.clone(),
-            None => return Err(NoResult),
-        };
-        self.auth_result = Some(AuthorizationResult {
-            auth_code: auth_code.clone(),
-            state: state_in.clone(),
-        });
-
-        let auth_ctx = AuthContext {
-            auth_code: AuthorizationCode::new(auth_code.clone()),
-            state,
-            pkce_verifier,
-        };
-        self.auth_context = Some(auth_ctx);
-
-        Ok(())
+        match result {
+            Ok(auth_result) => {
+                self.auth_result = Some(auth_result.clone());
+                let auth_ctx = AuthContext {
+                    auth_code: AuthorizationCode::new(auth_result.auth_code.clone()),
+                    state,
+                    pkce_verifier,
+                };
+                self.auth_context = Some(auth_ctx);
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// Validates the authorization code and CSRF token (`state`).
@@ -337,17 +319,17 @@ mod tests {
     pub(crate) static LOCALHOST: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
     pub(crate) static PORT_GENERATOR: AtomicU16 = AtomicU16::new(8000);
 
-    /// Acquires a range of port numbers for a test.
-    ///
-    /// Any test that needs to perform testing with network ports should call this method at the
-    /// beginning to get the next start and end ports for the test:
-    ///
-    /// ```
-    /// let (port_start, port_end) = next_ports(5);
-    /// ```
-    ///
-    /// The function is backed by an atomic integer, so each test is guaranteed to get a unique
-    /// range.
+    // Acquires a range of port numbers for a test.
+    //
+    // Any test that needs to perform testing with network ports should call this method at the
+    // beginning to get the next start and end ports for the test:
+    //
+    // ```
+    // let (port_start, port_end) = next_ports(5);
+    // ```
+    //
+    // The function is backed by an atomic integer, so each test is guaranteed to get a unique
+    // range.
     pub(crate) fn next_ports(count: u16) -> (u16, u16) {
         let start = PORT_GENERATOR.fetch_add(count, AcqRel);
         let end = start + count - 1;
