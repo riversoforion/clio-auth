@@ -27,6 +27,7 @@ jobs:
   publish:
     name: Publish crate
     runs-on: ubuntu-latest
+    needs: [sanity-check]
 
     steps:
       - name: Checkout repository
@@ -35,7 +36,7 @@ jobs:
       - name: Crate version
         id: crate-version
         run: |
-          version=$(cargo metadata --format-version=1 --no-deps | jq '.packages[0].version')
+          version=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[0].version')
           echo "VERSION=${version}" >> $GITHUB_OUTPUT
 
       # Just log what we didn't do
