@@ -34,7 +34,7 @@ jobs:
 
       - name: Publishing dry run
         if: env.TRIGGER == 'pull_request'
-        run: echo "Pull request detected! Crate will not be published.
+        run: echo "Pull request detected! Crate will not be published."
 
 
       # Push release to crates.io
