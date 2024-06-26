@@ -3,45 +3,43 @@ name: Publish Release
 on:
   release:
     types: ["published"]
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 env:
   CARGO_TERM_COLOR: always
+  TRIGGER: ${{ (github.event_name == 'release') && 'release' || 'pull_request' }}
 
 jobs:
-  build-packages:
-    strategy:
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-
-    runs-on: ${{matrix.os}}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      # Build artifacts for each platform (preferably preferred packaging)
-      # Save artifacts on release
-
-  publish:
+  sanity-check:
+    # Anything we publish should've already run tests on multiple platforms, but just double-check
+    name: Sanity check code
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose
+
+  publish:
+    name: Publish crate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Publishing dry run
+        if: env.TRIGGER == 'pull_request'
+        run: echo "Pull request detected! Crate will not be published.
+
 
       # Push release to crates.io
-      # Push to docs.rs?
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
-          default: true
-
       - name: Publish to crates.io
-        uses: actions-rs/cargo@v1
+        if: env.TRIGGER == 'release'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        with:
-          command: publish
-          args: --no-verify --locked
+        run: cargo publish --dry-run
