@@ -11,29 +11,18 @@ env:
   TRIGGER: ${{ (github.event_name == 'release') && 'release' || 'pull_request' }}
 
 jobs:
-  sanity-check:
-    # Anything we publish should've already run tests on multiple platforms, but just double-check
-    name: Sanity check code
-    runs-on: ubuntu-latest
-    # PRs have their own pipeline, so this is overkill
-    if: env.TRIGGER == 'release'
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Build
-        run: cargo build --verbose
-      - name: Run tests
-        run: cargo test --verbose
-
   publish:
     name: Publish crate
     runs-on: ubuntu-latest
-    needs: [sanity-check]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Sanity check build
+        # PRs have their own CI pipeline, so this is overkill
+        if: env.TRIGGER == 'release'
+        run: cargo test --verbose
 
       - name: Crate version
         id: crate-version
