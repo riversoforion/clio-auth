@@ -159,12 +159,59 @@ struct AuthCodeQueryParams {
 
 #[cfg(test)]
 mod tests {
-    use crate::server::{default_error_response, default_ok_response};
+    use crate::server::{
+        default_error_response, default_ok_response, extract_auth_params, AuthCodeQueryParams,
+    };
     use crate::ServerError;
     use poem::{Error, IntoResponse};
     use reqwest::StatusCode;
     use std::io;
     use std::io::ErrorKind;
+    use std::mem::discriminant;
+
+    #[test]
+    fn extract_auth_params_when_present() {
+        let params = AuthCodeQueryParams {
+            code: Some("auth_code".to_owned()),
+            state: Some("auth_state".to_owned()),
+        };
+        let result = extract_auth_params(params);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn extract_auth_params_when_code_missing() {
+        let params = AuthCodeQueryParams {
+            code: None,
+            state: Some("auth_state".to_owned()),
+        };
+        let result = extract_auth_params(params);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(error.status(), StatusCode::BAD_REQUEST);
+        let server_error = error.downcast::<ServerError>().unwrap();
+        assert_eq!(
+            discriminant(&server_error),
+            discriminant(&ServerError::NoResult)
+        );
+    }
+
+    #[test]
+    fn extract_auth_params_when_state_missing() {
+        let params = AuthCodeQueryParams {
+            code: Some("auth_code".to_owned()),
+            state: None,
+        };
+        let result = extract_auth_params(params);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(error.status(), StatusCode::BAD_REQUEST);
+        let server_error = error.downcast::<ServerError>().unwrap();
+        assert_eq!(
+            discriminant(&server_error),
+            discriminant(&ServerError::NoResult)
+        );
+    }
 
     #[tokio::test]
     async fn default_ok_response_has_success_message() {
