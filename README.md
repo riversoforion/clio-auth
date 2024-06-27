@@ -7,8 +7,8 @@
 
 [gh-badge]: https://img.shields.io/badge/github-riversoforion%2Fclio--auth-23657d?style=for-the-badge&logo=github
 [gh-url]: https://github.com/riversoforion/clio-auth
-[gh-build-badge]: https://img.shields.io/github/actions/workflow/status/riversoforion/clio-auth/build-and-test.yaml?style=for-the-badge&logo=github
-[gh-build-url]: https://github.com/riversoforion/clio-auth/actions/workflows/build-and-test.yaml
+[gh-build-badge]: https://img.shields.io/github/actions/workflow/status/riversoforion/clio-auth/pr-verification.yaml?style=for-the-badge&logo=github
+[gh-build-url]: https://github.com/riversoforion/clio-auth/actions/workflows/pr-verification.yaml
 [crates-badge]: https://img.shields.io/crates/l/clio-auth?style=for-the-badge&logo=rust&color=gold
 [crates-url]: https://crates.io/crates/clio-auth
 [docs-badge]: https://img.shields.io/docsrs/clio-auth?style=for-the-badge&logo=docsdotrs&link=https%3A%2F%2Fdocs.rs%2Fclio-auth
