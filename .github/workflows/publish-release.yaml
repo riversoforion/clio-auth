@@ -1,0 +1,58 @@
+name: Publish Release
+
+on:
+  release:
+    types: ["published"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  CARGO_TERM_COLOR: always
+  TRIGGER: ${{ (github.event_name == 'release') && 'release' || 'pull_request' }}
+
+jobs:
+  publish:
+    name: publish crate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Sanity check build
+        # PRs have their own CI pipeline, so this is overkill
+        if: env.TRIGGER == 'release'
+        run: cargo test --verbose
+
+      - name: Crate version
+        id: crate-version
+        run: |
+          version=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[0].version')
+          echo "VERSION=${version}" >> $GITHUB_OUTPUT
+
+      # Just log what we didn't do
+      - name: Publish (dry run)
+        if: env.TRIGGER == 'pull_request'
+        env:
+          CRATE_VERSION: ${{ steps.crate-version.outputs.VERSION }}
+        run: |
+          echo "## Publish Result" >> $GITHUB_STEP_SUMMARY
+          echo "_Pull request detected!_" >> $GITHUB_STEP_SUMMARY
+          echo "Crate v${CRATE_VERSION} will not be published at this time." >> $GITHUB_STEP_SUMMARY
+
+      # Push release to crates.io
+      - name: Publish to crates.io
+        if: env.TRIGGER == 'release'
+        env:
+          CRATE_VERSION: ${{ steps.crate-version.outputs.VERSION }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          echo "## Publish Result" >> $GITHUB_STEP_SUMMARY
+          cargo publish --no-verify --locked
+          if [ $? -eq 0 ]; then
+            echo ":white_check_mark: *clio-auth `v${CRATE_VERSION}` published*" >> $GITHUB_STEP_SUMMARY
+          else
+            echo ":x: clio-auth v${CRATE_VERSION} _*NOT*_ published!" >> $GITHUB_STEP_SUMMARY
+            echo "See action log for details" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
