@@ -12,7 +12,7 @@ env:
 
 jobs:
   publish:
-    name: Publish crate
+    name: publish crate
     runs-on: ubuntu-latest
 
     steps:
@@ -31,7 +31,7 @@ jobs:
           echo "VERSION=${version}" >> $GITHUB_OUTPUT
 
       # Just log what we didn't do
-      - name: Publishing dry run
+      - name: Publish (dry run)
         if: env.TRIGGER == 'pull_request'
         env:
           CRATE_VERSION: ${{ steps.crate-version.outputs.VERSION }}
@@ -50,7 +50,7 @@ jobs:
           echo "## Publish Result" >> $GITHUB_STEP_SUMMARY
           cargo publish --no-verify --locked
           if [ $? -eq 0 ]; then
-            echo ":white_check_mark: *clio-auth v${CRATE_VERSION} published*" >> $GITHUB_STEP_SUMMARY
+            echo ":white_check_mark: *clio-auth `v${CRATE_VERSION}` published*" >> $GITHUB_STEP_SUMMARY
           else
             echo ":x: clio-auth v${CRATE_VERSION} _*NOT*_ published!" >> $GITHUB_STEP_SUMMARY
             echo "See action log for details" >> $GITHUB_STEP_SUMMARY

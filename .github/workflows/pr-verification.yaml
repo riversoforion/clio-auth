@@ -1,4 +1,4 @@
-name: Build and Test
+name: PR Verification
 
 on:
   push:
@@ -11,7 +11,7 @@ env:
 
 jobs:
   build:
-    name: Build and test
+    name: build and test
     if: ${{ !github.event.act }}
 
     strategy:
@@ -33,7 +33,7 @@ jobs:
         run: cargo test --verbose
 
   quality:
-    name: Quality checks
+    name: quality checks
     runs-on: ubuntu-latest
 
     steps:
