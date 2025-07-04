@@ -10,6 +10,9 @@ documentation = "https://docs.rs/clio-auth"
 keywords = ["auth", "oauth2", "cli", "desktop"]
 categories = ["authentication", "command-line-interface"]
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
+
 [dependencies]
 log = "0.4.21"
 oauth2 = "4.4.2"
