@@ -7,3 +7,11 @@ cobertura.xml
 ## IDEs
 *.iml
 /.idea
+
+## Platform-specific
+# macOS
+.DS_Store
+# Windows
+Thumbs.db
+# Linux
+*~
