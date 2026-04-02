@@ -2,7 +2,7 @@
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -19,8 +19,8 @@ repos:
       # Enable clippy after cleaning up a few things
       # - id: clippy
   - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v2.3.0
+    rev: v4.4.0
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
-        args: []
+        args: [--verbose, build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test]
