@@ -1,0 +1,39 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example: auth0",
+      "cargo": {
+        "args": [
+          "build",
+          "--example=auth0",
+        ],
+        "filter": {
+          "name": "auth0",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example: youtube",
+      "cargo": {
+        "args": [
+          "build",
+          "--example=youtube",
+        ],
+        "filter": {
+          "name": "youtube",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
