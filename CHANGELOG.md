@@ -9,14 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-22
+
 ### Added
 - VS Code extension recommendations, launch configs, tasks, and settings
 - `CLAUDE.md` project documentation for Claude Code
+- Automated release pipeline via `release-plz` (draft releases on merge, crates.io publish on release)
+- `CHANGELOG.md` with full history back to v0.5.0
+- Branch ruleset replacing classic branch protection, with correct check names
 
 ### Changed
 - Dependency updates: tokio 1.52, reqwest 0.13, thiserror 2.0, and more
 - Replaced `tokio` `full` feature flag with specific features used by the library
 - Workflow improvements: Rust caching, prebuilt tarpaulin, concurrency groups, least-privilege permissions
+- Bumped all GitHub Actions to latest major versions (checkout v7, codecov v7, upload-artifact v7)
 
 ### Fixed
 - GitHub Actions `PR Verification` workflow was silently skipping the `build and test` job due to an invalid `if:` condition
@@ -80,7 +86,8 @@ Initial release.
 - CI pipeline with multi-platform builds and code coverage
 
 <!-- next-url -->
-[Unreleased]: https://github.com/riversoforion/clio-auth/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/riversoforion/clio-auth/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/riversoforion/clio-auth/compare/v0.8.0...v0.9.0
 [0.8.1]: https://github.com/riversoforion/clio-auth/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/riversoforion/clio-auth/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/riversoforion/clio-auth/compare/v0.7.0...v0.7.1
