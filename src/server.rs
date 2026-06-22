@@ -48,21 +48,15 @@ pub(crate) async fn launch(
     info!("🏃 server running at http://{address}");
     debug!("⏳ waiting for {timeout:?}");
 
-    if let Err(e) = server.await {
-        error!("⚠️ server error: {}", e);
-        Err(ServerError::InternalServerError(e))
-    } else {
-        let AuthorizationResult {
-            auth_code,
-            state: state_in,
-        } = match &mut *auth_code_holder.lock().unwrap() {
-            Some(auth_result) => auth_result.clone(),
-            None => return Err(NoResult),
-        };
-        Ok(AuthorizationResult {
-            auth_code: auth_code.clone(),
-            state: state_in.clone(),
-        })
+    match server.await {
+        Err(e) => {
+            error!("⚠️ server error: {e}");
+            Err(ServerError::InternalServerError(e))
+        }
+        Ok(()) => match &*auth_code_holder.lock().unwrap() {
+            Some(auth_result) => Ok(auth_result.clone()),
+            None => Err(NoResult),
+        },
     }
 }
 
@@ -95,14 +89,12 @@ async fn handle_request(
 }
 
 fn extract_auth_params(params: AuthCodeQueryParams) -> poem::Result<AuthorizationResult> {
-    if params.code.is_none() || params.state.is_none() {
-        error!("⚠️ missing authorization code query parameters");
-        Err(NoResult.into())
-    } else {
-        Ok(AuthorizationResult {
-            auth_code: params.code.unwrap(),
-            state: params.state.unwrap(),
-        })
+    match (params.code, params.state) {
+        (Some(auth_code), Some(state)) => Ok(AuthorizationResult { auth_code, state }),
+        _ => {
+            error!("⚠️ missing authorization code query parameters");
+            Err(NoResult.into())
+        }
     }
 }
 
