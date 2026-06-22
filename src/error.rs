@@ -31,7 +31,7 @@ pub enum ServerError {
     /// The Tokio runtime could not be found
     #[error("Tokio must be running")]
     AsyncRuntimeRequired(#[from] TryCurrentError),
-    #[error("")]
+    #[error("Internal runtime error")]
     InternalRuntimeError(#[from] JoinError),
     /// Error sending a signal to the internal server
     #[error("Error signaling server")]

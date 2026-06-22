@@ -6,13 +6,19 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build:
     name: build and test
-    if: ${{ !github.event.act }}
 
     strategy:
       matrix:
@@ -22,7 +28,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
 
       - name: Run tests
         if: ${{ vars.ACTIONS_STEP_DEBUG != 'true' }}
@@ -38,12 +47,17 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
       - name: Install Tarpaulin
-        run: cargo install cargo-tarpaulin
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
 
       - name: Rust version
         run: |
@@ -53,7 +67,7 @@ jobs:
       - name: Lint and format
         run: |
           cargo fmt --check --verbose
-          cargo clippy --all-targets --all-features
+          cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Analyze code coverage
         run: cargo tarpaulin --out XML

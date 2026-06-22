@@ -1,0 +1,11 @@
+[workspace]
+# Create draft releases — developer reviews and publishes manually
+git_release_draft = true
+
+# Do not publish to crates.io from release-plz; publish-release.yaml handles that
+# on the `release: published` event instead
+publish = false
+
+# Maintain CHANGELOG.md
+changelog_update = true
+changelog_path = "CHANGELOG.md"

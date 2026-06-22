@@ -21,42 +21,28 @@
 //! and demonstrates how `CliOAuth` fills in the gaps.
 //!
 //! ```no_run
-//! use anyhow;
-//! use oauth2::{
-//!     AuthorizationCode,
-//!     AuthUrl,
-//!     ClientId,
-//!     ClientSecret,
-//!     CsrfToken,
-//!     PkceCodeChallenge,
-//!     RedirectUrl,
-//!     Scope,
-//!     TokenResponse,
-//!     TokenUrl
-//! };
+//! use clio_auth::{AuthContext, CliOAuth};
+//! use log::{info, warn};
 //! use oauth2::basic::BasicClient;
-//! # #[cfg(feature = "reqwest")]
 //! use oauth2::reqwest::async_http_client;
-//! use url::Url;
+//! use oauth2::{AuthUrl, ClientId, ClientSecret, TokenUrl};
 //!
-//! # #[cfg(feature = "reqwest")]
-//! # async fn err_wrapper() -> Result<(), anyhow::Error> {
+//! # async fn err_wrapper() -> Result<(), Box<dyn std::error::Error>> {
 //! // CliOAuth: Build helper with default options
-//! let mut auth = clio_auth::CliOAuth::builder().build().unwrap();        // (1)
+//! let mut auth = CliOAuth::builder().build().unwrap();                  // (1)
 //! // Create an OAuth2 client by specifying the client ID, client secret, authorization URL and
 //! // token URL.
-//! let client =
-//!     BasicClient::new(
-//!         ClientId::new("client_id".to_string()),
-//!         Some(ClientSecret::new("client_secret".to_string())),
-//!         AuthUrl::new("http://authorize".to_string())?,
-//!         Some(TokenUrl::new("http://token".to_string())?)
-//!     )
-//!     // CliOAuth: Use the local redirect URL
-//!     .set_redirect_uri(auth.redirect_url());                           // (2)
+//! let client = BasicClient::new(
+//!     ClientId::new("client_id".to_string()),
+//!     Some(ClientSecret::new("client_secret".to_string())),
+//!     AuthUrl::new("http://authorize".to_string())?,
+//!     Some(TokenUrl::new("http://token".to_string())?),
+//! )
+//! // CliOAuth: Use the local redirect URL
+//! .set_redirect_uri(auth.redirect_url());                              // (2)
 //!
 //! // CliOAuth: The PKCE challenge is handled internally. Just authorize... (3)
-//! match auth.authorize(&oauth_client).await {
+//! match auth.authorize(&client).await {
 //!     Ok(()) => info!("authorized successfully"),
 //!     Err(e) => warn!("uh oh! {:?}", e),
 //! };
@@ -74,14 +60,14 @@
 //!         state: _,
 //!     }) => {
 //!         // Now you can trade it for an access token.
-//!         let token_result = client
+//!         let _token_result = client
 //!             .exchange_code(auth_code)                                // (5)
 //!             // Set the PKCE code verifier.
 //!             .set_pkce_verifier(pkce_verifier)
 //!             .request_async(async_http_client)
 //!             .await?;
 //!         // Unwrapping token_result will either produce a Token or a RequestTokenError.
-//!     },
+//!     }
 //!     Err(e) => warn!("uh oh! {:?}", e),
 //! }
 //!
@@ -92,10 +78,10 @@
 //! _Breaking it down..._
 //!
 //! 1. `CliOAuth` construction starts with a [builder](CliOAuthBuilder), which allows you to
-//! customize the way the authorization helper is configured. See the builder doc for more details
-//! about configuration.
+//!    customize the way the authorization helper is configured. See the builder doc for more details
+//!    about configuration.
 //! 2. `CliOAuth` constructs the authorization URL based on the address & port it is running on. The
-//! URL is provided to the [`oauth2::Client`] during construction.
+//!    URL is provided to the [`oauth2::Client`] during construction.
 //! 3. Invoking the [`CliOAuth::authorize`] method will do the following things:
 //!    - Launch a local web server
 //!    - Generate the CSRF protection token (`state` parameter)
@@ -103,10 +89,10 @@
 //!    - Receive the redirect from the IdP that contains the incoming authorization code
 //!    - Shutdown the local web server
 //! 4. Invoking the [`CliOAuth::validate`] method will verify that an auth code was received and
-//! that the `state` parameter matches the expected value. If validation succeeds, the auth code and
-//! PKCE verifier will be returned to the caller.
+//!    that the `state` parameter matches the expected value. If validation succeeds, the auth code
+//!    and PKCE verifier will be returned to the caller.
 //! 5. The auth code and PKCE verifier are provided to the
-//! [exchange code](oauth2::Client::exchange_code) flow.
+//!    [exchange code](oauth2::Client::exchange_code) flow.
 //!
 //! [1]: https://www.rfc-editor.org/rfc/rfc7636
 //! [2]: https://crates.io/crates/oauth2
