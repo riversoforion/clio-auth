@@ -96,16 +96,11 @@ fn build_client(access_token: &String) -> reqwest::Result<Client> {
 }
 
 async fn show_account_info(client: &Client) {
-    match client
-        .get(
-            "https://www.googleapis.com/oauth2/v2/userinfo"
-                .parse::<Url>()
-                .unwrap(),
-        )
-        .query(&[("alt", "json")])
-        .send()
-        .await
-    {
+    let mut url = "https://www.googleapis.com/oauth2/v2/userinfo"
+        .parse::<Url>()
+        .unwrap();
+    url.query_pairs_mut().append_pair("alt", "json");
+    match client.get(url).send().await {
         Ok(response) => match response.json::<UserInfo>().await {
             Ok(user) => {
                 info!("🧍 User {}: {}", user.id, user.name);
@@ -118,20 +113,15 @@ async fn show_account_info(client: &Client) {
 }
 
 async fn search_for_videos(client: &Client) {
-    match client
-        .get(
-            "https://www.googleapis.com/youtube/v3/search"
-                .parse::<Url>()
-                .unwrap(),
-        )
-        .query(&[
-            ("maxResults", "5"),
-            ("part", "snippet"),
-            ("q", "never gonna give you up"),
-        ])
-        .send()
-        .await
-    {
+    let mut url = "https://www.googleapis.com/youtube/v3/search"
+        .parse::<Url>()
+        .unwrap();
+    let mut query = url.query_pairs_mut();
+    query.append_pair("maxResults", "5");
+    query.append_pair("part", "snippet");
+    query.append_pair("q", "never gonna give you up");
+    drop(query);
+    match client.get(url).send().await {
         Ok(response) => match response.json::<SearchResults>().await {
             Ok(result) => {
                 result.items.into_iter().for_each(|result| {
