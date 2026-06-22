@@ -12,7 +12,6 @@ env:
 jobs:
   build:
     name: build and test
-    if: ${{ !github.event.act }}
 
     strategy:
       matrix:
