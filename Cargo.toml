@@ -14,23 +14,23 @@ categories = ["authentication", "command-line-interface"]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
 
 [dependencies]
-log = "0.4.29"
+log = "0.4.33"
 oauth2 = "4.4.2"
-open = "5.3.3"
+open = "5.3.5"
 serde = "1.0.228"
-tokio = { version = "1.50.0", features = ["full"] }
+tokio = { version = "1.52.3", features = ["full"] }
 poem = { version = "3.1.12" }
 url = "2.5.8"
-thiserror = "1.0.69"
+thiserror = "2.0.18"
 
 [dev-dependencies]
 rstest = "0.26.1"
 mockall = "0.14.0"
 anyhow = "1.0.102"
 pretty_env_logger = "0.5.0"
-reqwest = { version = "0.12.28", features = ["default", "json"] }
+reqwest = { version = "0.13.4", features = ["default", "json"] }
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
+serde_json = "1.0.150"
 
 [[example]]
 name = "auth0"
