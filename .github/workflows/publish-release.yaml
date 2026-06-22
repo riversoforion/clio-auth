@@ -6,6 +6,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   TRIGGER: ${{ (github.event_name == 'release') && 'release' || 'pull_request' }}
@@ -17,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Sanity check build
         # PRs have their own CI pipeline, so this is overkill
@@ -48,8 +51,7 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           echo "## Publish Result" >> $GITHUB_STEP_SUMMARY
-          cargo publish --no-verify --locked
-          if [ $? -eq 0 ]; then
+          if cargo publish --no-verify --locked; then
             echo ":white_check_mark: *clio-auth `v${CRATE_VERSION}` published*" >> $GITHUB_STEP_SUMMARY
           else
             echo ":x: clio-auth v${CRATE_VERSION} _*NOT*_ published!" >> $GITHUB_STEP_SUMMARY
