@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0](https://github.com/riversoforion/clio-auth/compare/v0.9.0...v1.0.0) - 2026-06-23
+
+### Added
+
+- Finalize 1.0 release ([#34](https://github.com/riversoforion/clio-auth/pull/34))
+
 ## [0.9.0] - 2026-06-22
 
 ### Added
