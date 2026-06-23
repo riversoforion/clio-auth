@@ -19,7 +19,6 @@ use crate::error::ServerError;
 use crate::ServerError::NoResult;
 use crate::{AuthorizationResult, AuthorizationResultHolder};
 
-#[cfg(not(tarpaulin_include))]
 pub(crate) async fn launch(
     address: SocketAddr,
     timeout: Duration,
@@ -60,7 +59,6 @@ pub(crate) async fn launch(
     }
 }
 
-#[cfg(not(tarpaulin_include))]
 #[handler]
 async fn handle_request(
     query_params: Query<AuthCodeQueryParams>,
@@ -152,7 +150,8 @@ struct AuthCodeQueryParams {
 #[cfg(test)]
 mod tests {
     use crate::server::{
-        default_error_response, default_ok_response, extract_auth_params, AuthCodeQueryParams,
+        default_error_response, default_ok_response, extract_auth_params, launch,
+        AuthCodeQueryParams,
     };
     use crate::ServerError;
     use poem::{Error, IntoResponse};
@@ -160,6 +159,60 @@ mod tests {
     use std::io;
     use std::io::ErrorKind;
     use std::mem::discriminant;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use std::sync::atomic::AtomicU16;
+    use std::sync::atomic::Ordering::AcqRel;
+    use std::time::Duration;
+
+    static LOCALHOST: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
+    static PORT_GENERATOR: AtomicU16 = AtomicU16::new(9000);
+
+    fn next_port() -> u16 {
+        PORT_GENERATOR.fetch_add(1, AcqRel)
+    }
+
+    #[tokio::test]
+    async fn launch_handles_auth_callback() {
+        let addr = SocketAddr::new(LOCALHOST, next_port());
+        let server = tokio::spawn(launch(addr, Duration::from_secs(5)));
+        // Give the server a moment to bind
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let resp = reqwest::get(format!("http://{}?code=test_code&state=test_state", addr))
+            .await
+            .expect("request should succeed");
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let result = server
+            .await
+            .expect("task should complete")
+            .expect("server should return a result");
+        assert_eq!(result.auth_code, "test_code");
+        assert_eq!(result.state, "test_state");
+    }
+
+    #[tokio::test]
+    async fn launch_times_out_with_no_request() {
+        let addr = SocketAddr::new(LOCALHOST, next_port());
+        let result = launch(addr, Duration::from_millis(100)).await;
+        assert!(matches!(result, Err(ServerError::NoResult)));
+    }
+
+    #[tokio::test]
+    async fn launch_returns_error_on_missing_code() {
+        let addr = SocketAddr::new(LOCALHOST, next_port());
+        let server = tokio::spawn(launch(addr, Duration::from_secs(5)));
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Missing `code` param — server should respond with 400 and eventually time out
+        let resp = reqwest::get(format!("http://{}?state=test_state", addr))
+            .await
+            .expect("request should succeed");
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+        // Server gets no valid code so it times out — abort to avoid waiting
+        server.abort();
+    }
 
     #[test]
     fn extract_auth_params_when_present() {

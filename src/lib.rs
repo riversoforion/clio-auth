@@ -24,7 +24,6 @@
 //! use clio_auth::{AuthContext, CliOAuth};
 //! use log::{info, warn};
 //! use oauth2::basic::BasicClient;
-//! use oauth2::reqwest::async_http_client;
 //! use oauth2::{AuthUrl, ClientId, ClientSecret, TokenUrl};
 //!
 //! # async fn err_wrapper() -> Result<(), Box<dyn std::error::Error>> {
@@ -32,18 +31,16 @@
 //! let mut auth = CliOAuth::builder().build().unwrap();                  // (1)
 //! // Create an OAuth2 client by specifying the client ID, client secret, authorization URL and
 //! // token URL.
-//! let client = BasicClient::new(
-//!     ClientId::new("client_id".to_string()),
-//!     Some(ClientSecret::new("client_secret".to_string())),
-//!     AuthUrl::new("http://authorize".to_string())?,
-//!     Some(TokenUrl::new("http://token".to_string())?),
-//! )
+//! let client = BasicClient::new(ClientId::new("client_id".to_string()))
+//!     .set_client_secret(ClientSecret::new("client_secret".to_string()))
+//!     .set_auth_uri(AuthUrl::new("http://authorize".to_string())?)
+//!     .set_token_uri(TokenUrl::new("http://token".to_string())?)
 //! // CliOAuth: Use the local redirect URL
-//! .set_redirect_uri(auth.redirect_url());                              // (2)
+//!     .set_redirect_uri(auth.redirect_url());                          // (2)
 //!
 //! // CliOAuth: The PKCE challenge is handled internally. Just authorize... (3)
 //! match auth.authorize(&client).await {
-//!     Ok(()) => info!("authorized successfully"),
+//!     Ok(auth_url) => info!("authorized successfully (url: {})", auth_url),
 //!     Err(e) => warn!("uh oh! {:?}", e),
 //! };
 //! // CliOAuth: The browser is opened to the authorization URL              (3)
@@ -60,11 +57,12 @@
 //!         state: _,
 //!     }) => {
 //!         // Now you can trade it for an access token.
+//!         let http_client = oauth2::reqwest::Client::new();
 //!         let _token_result = client
 //!             .exchange_code(auth_code)                                // (5)
 //!             // Set the PKCE code verifier.
 //!             .set_pkce_verifier(pkce_verifier)
-//!             .request_async(async_http_client)
+//!             .request_async(&http_client)
 //!             .await?;
 //!         // Unwrapping token_result will either produce a Token or a RequestTokenError.
 //!     }
@@ -105,8 +103,9 @@ use std::time::Duration;
 
 use log::debug;
 use oauth2::{
-    AuthorizationCode, CsrfToken, ErrorResponse, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl,
-    RevocableToken, Scope, TokenIntrospectionResponse, TokenResponse, TokenType,
+    AuthorizationCode, CsrfToken, EndpointSet, EndpointState, ErrorResponse, PkceCodeChallenge,
+    PkceCodeVerifier, RedirectUrl, RevocableToken, Scope, TokenIntrospectionResponse,
+    TokenResponse,
 };
 use tokio::runtime::Handle;
 use url::Url;
@@ -131,6 +130,7 @@ pub struct CliOAuth {
     address: SocketAddr,
     timeout: u64,
     scopes: Vec<Scope>,
+    open_browser: bool,
     auth_context: Option<AuthContext>,
     auth_result: Option<AuthorizationResult>,
 }
@@ -156,21 +156,48 @@ impl CliOAuth {
     /// The PKCE challenge and verifier are generated. The challenge is used in the authorization
     /// URL, and the verifier is saved for the validation step.
     ///
-    /// The user's browser is then opened to the authorization URL, and the authorization code (`code`) and CSRF token
-    /// (`state`) are extracted from the redirect request and recorded . These values will also be used in the
-    /// validation step, and then returned to the caller for the token exchange.
+    /// The authorization URL is returned. If [`CliOAuthBuilder::open_browser`] is `true` (the
+    /// default), the user's browser is also opened to that URL automatically.
+    ///
+    /// The authorization code (`code`) and CSRF token (`state`) are extracted from the redirect
+    /// request and recorded. These values are used in the validation step, and then returned to
+    /// the caller for the token exchange.
     #[cfg(not(tarpaulin_include))]
-    pub async fn authorize<TE, TR, TT, TIR, RT, TRE>(
+    pub async fn authorize<
+        TE,
+        TR,
+        TIR,
+        RT,
+        TRE,
+        HasDeviceAuthUrl,
+        HasIntrospectionUrl,
+        HasRevocationUrl,
+        HasTokenUrl,
+    >(
         &mut self,
-        oauth_client: &oauth2::Client<TE, TR, TT, TIR, RT, TRE>,
-    ) -> Result<(), ServerError>
+        oauth_client: &oauth2::Client<
+            TE,
+            TR,
+            TIR,
+            RT,
+            TRE,
+            EndpointSet,
+            HasDeviceAuthUrl,
+            HasIntrospectionUrl,
+            HasRevocationUrl,
+            HasTokenUrl,
+        >,
+    ) -> Result<Url, ServerError>
     where
         TE: ErrorResponse + 'static,
-        TR: TokenResponse<TT>,
-        TT: TokenType,
-        TIR: TokenIntrospectionResponse<TT>,
+        TR: TokenResponse,
+        TIR: TokenIntrospectionResponse,
         RT: RevocableToken,
         TRE: ErrorResponse + 'static,
+        HasDeviceAuthUrl: EndpointState,
+        HasIntrospectionUrl: EndpointState,
+        HasRevocationUrl: EndpointState,
+        HasTokenUrl: EndpointState,
     {
         let scopes: Vec<Scope> = self.scopes.to_vec();
         let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
@@ -185,7 +212,9 @@ impl CliOAuth {
         let server = handle.spawn(launch(self.address, Duration::from_secs(self.timeout)));
 
         debug!("🔑 authorization URL: {}", auth_url);
-        open::that(auth_url.as_str())?;
+        if self.open_browser {
+            open::that(auth_url.as_str())?;
+        }
 
         let result = server.await?;
 
@@ -198,7 +227,7 @@ impl CliOAuth {
                     pkce_verifier,
                 };
                 self.auth_context = Some(auth_ctx);
-                Ok(())
+                Ok(auth_url)
             }
             Err(e) => Err(e),
         }
@@ -392,6 +421,7 @@ mod tests {
                 address: ([127, 0, 0, 1], 8080).into(),
                 timeout: 30,
                 scopes: vec![],
+                open_browser: true,
                 auth_context: None,
                 auth_result: None,
             }

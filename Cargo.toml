@@ -15,10 +15,16 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
 
 [dependencies]
 log = "0.4.33"
-oauth2 = "4.4.2"
+oauth2 = "5.0.0"
 open = "5.3.5"
 serde = "1.0.228"
-tokio = { version = "1.52.3", features = ["rt-multi-thread", "sync", "time", "macros", "signal"] }
+tokio = { version = "1.52.3", features = [
+  "rt-multi-thread",
+  "sync",
+  "time",
+  "macros",
+  "signal",
+] }
 poem = "3.1.12"
 url = "2.5.8"
 thiserror = "2.0.18"

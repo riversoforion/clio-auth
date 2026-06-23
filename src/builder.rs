@@ -15,6 +15,7 @@ pub struct CliOAuthBuilder {
     socket_address: Option<SocketAddr>,
     timeout: u64,
     scopes: Vec<Scope>,
+    open_browser: bool,
 }
 
 impl CliOAuthBuilder {
@@ -25,6 +26,7 @@ impl CliOAuthBuilder {
             socket_address: None,
             timeout: DEFAULT_TIMEOUT,
             scopes: Default::default(),
+            open_browser: true,
         }
     }
 
@@ -112,6 +114,18 @@ impl CliOAuthBuilder {
         self
     }
 
+    /// Controls whether [`CliOAuth::authorize`] automatically opens the authorization URL in the
+    /// system browser.
+    ///
+    /// When `false`, the URL is returned but the browser is not opened. The caller is responsible
+    /// for directing the user to the URL. This is useful in scripted or non-interactive contexts.
+    ///
+    /// The default is `true`.
+    pub fn open_browser(mut self, open_browser: bool) -> Self {
+        self.open_browser = open_browser;
+        self
+    }
+
     /// Constructs the [`CliOAuth`] instance with the configuration captured in this builder.
     pub fn build(self) -> ConfigResult<CliOAuth> {
         self.validate()?;
@@ -120,6 +134,7 @@ impl CliOAuthBuilder {
             address: socket_addr,
             timeout: self.timeout,
             scopes: self.scopes,
+            open_browser: self.open_browser,
             auth_context: None,
             auth_result: None,
         })
@@ -149,6 +164,7 @@ mod tests {
         assert_eq!(builder.ip_address.clone(), LOCALHOST);
         assert_eq!(builder.socket_address.clone(), None);
         assert_eq!(builder.timeout, DEFAULT_TIMEOUT);
+        assert!(builder.open_browser);
         builder.validate().expect("builder should be valid");
     }
 
@@ -242,6 +258,20 @@ mod tests {
     fn set_timeout() {
         let builder = CliOAuthBuilder::new().timeout(120);
         assert_eq!(builder.timeout, 120);
+    }
+
+    #[rstest]
+    fn set_open_browser_false() {
+        let builder = CliOAuthBuilder::new().open_browser(false);
+        assert!(!builder.open_browser);
+    }
+
+    #[rstest]
+    fn set_open_browser_true() {
+        let builder = CliOAuthBuilder::new()
+            .open_browser(false)
+            .open_browser(true);
+        assert!(builder.open_browser);
     }
 
     #[rstest]
