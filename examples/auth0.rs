@@ -6,7 +6,11 @@ use clio_auth::AuthContext;
 
 #[tokio::main]
 async fn main() {
-    pretty_env_logger::init();
+    // Defaults to info. Set `RUST_LOG=debug` for verbose output.
+    pretty_env_logger::formatted_builder()
+        .filter_level(log::LevelFilter::Info)
+        .parse_default_env()
+        .init();
 
     debug!("😃 I'm alive");
     // Build helper

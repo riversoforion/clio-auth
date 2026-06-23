@@ -10,8 +10,11 @@ use clio_auth::AuthContext;
 
 #[tokio::main]
 async fn main() {
-    // Set `RUST_LOG=debug` in your environment before running this example
-    pretty_env_logger::init();
+    // Defaults to info. Set `RUST_LOG=debug` for verbose output.
+    pretty_env_logger::formatted_builder()
+        .filter_level(log::LevelFilter::Info)
+        .parse_default_env()
+        .init();
 
     debug!("😃 I'm alive");
     // Build helper
@@ -61,7 +64,7 @@ async fn main() {
             if let Ok(token_result) = token_result {
                 let access_token = token_result.access_token();
                 info!("🔑 token type: {:?}", token_result.token_type());
-                info!("🔑 scopes: {:?}", token_result.scopes().unwrap());
+                info!("🔑 scopes: {:?}", token_result.scopes());
 
                 let access_token = access_token.secret();
                 match build_client(access_token) {
