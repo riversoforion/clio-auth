@@ -1,6 +1,5 @@
 use log::{debug, error, info, warn};
 use oauth2::basic::BasicClient;
-use oauth2::reqwest::async_http_client;
 use oauth2::{AuthUrl, ClientId, ClientSecret, Scope, TokenResponse, TokenUrl};
 use reqwest::header::{HeaderMap, AUTHORIZATION};
 use reqwest::Client;
@@ -11,8 +10,11 @@ use clio_auth::AuthContext;
 
 #[tokio::main]
 async fn main() {
-    // Set `RUST_LOG=debug` in your environment before running this example
-    pretty_env_logger::init();
+    // Defaults to info. Set `RUST_LOG=debug` for verbose output.
+    pretty_env_logger::formatted_builder()
+        .filter_level(log::LevelFilter::Info)
+        .parse_default_env()
+        .init();
 
     debug!("😃 I'm alive");
     // Build helper
@@ -36,16 +38,14 @@ async fn main() {
     let client_secret = "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".to_string();
     let auth_url = "https://accounts.google.com/o/oauth2/v2/auth".to_string();
     let token_url = "https://oauth2.googleapis.com/token".to_string();
-    let oauth_client = BasicClient::new(
-        ClientId::new(client_id),
-        Some(ClientSecret::new(client_secret)),
-        AuthUrl::new(auth_url).unwrap(),
-        Some(TokenUrl::new(token_url).unwrap()),
-    )
-    .set_redirect_uri(auth.redirect_url());
+    let oauth_client = BasicClient::new(ClientId::new(client_id))
+        .set_client_secret(ClientSecret::new(client_secret))
+        .set_auth_uri(AuthUrl::new(auth_url).unwrap())
+        .set_token_uri(TokenUrl::new(token_url).unwrap())
+        .set_redirect_uri(auth.redirect_url());
     info!("🟢 starting...");
     match auth.authorize(&oauth_client).await {
-        Ok(()) => info!("✅ authorized successfully"),
+        Ok(auth_url) => info!("✅ authorized successfully (url: {})", auth_url),
         Err(e) => warn!("⚠️ uh oh! {e:?}"),
     };
     match auth.validate() {
@@ -55,15 +55,16 @@ async fn main() {
             state: _,
         }) => {
             info!("✅ auth code is good to go");
+            let http_client = oauth2::reqwest::Client::new();
             let token_result = oauth_client
                 .exchange_code(auth_code)
                 .set_pkce_verifier(pkce_verifier)
-                .request_async(async_http_client)
+                .request_async(&http_client)
                 .await;
             if let Ok(token_result) = token_result {
                 let access_token = token_result.access_token();
                 info!("🔑 token type: {:?}", token_result.token_type());
-                info!("🔑 scopes: {:?}", token_result.scopes().unwrap());
+                info!("🔑 scopes: {:?}", token_result.scopes());
 
                 let access_token = access_token.secret();
                 match build_client(access_token) {
