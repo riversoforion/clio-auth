@@ -18,23 +18,30 @@ async fn main() {
 
     debug!("😃 I'm alive");
     // Build helper
+    // Only read-only scopes are requested: this example just fetches your profile and runs a
+    // video search. If you adapt it to call APIs that modify data, add the scopes you need.
     let yt_readonly = Scope::new("https://www.googleapis.com/auth/youtube.readonly".to_string());
-    let yt_force_ssl = Scope::new("https://www.googleapis.com/auth/youtube.force-ssl".to_string());
     let g_user_info = Scope::new("https://www.googleapis.com/auth/userinfo.profile".to_string());
     let mut auth = clio_auth::CliOAuth::builder()
         .timeout(30)
         .scope(g_user_info)
-        .scope(yt_force_ssl)
         .scope(yt_readonly)
         .build()
         .unwrap();
     // Configure OAuth struct
+    //
+    // NOTE: These are shared, intentionally public demo credentials. They live in a dedicated
+    // GCP project that exists solely so you can run this example without creating your own
+    // Google Cloud project and API credentials. The client is limited to read-only scopes and
+    // the project's API quota is capped. Do not use these credentials for anything real —
+    // register your own OAuth client for that.
     let client_id =
         "576721077498-7iacq9cpl4a5al4no0crbta6pet36t44.apps.googleusercontent.com".to_string();
     // Well, this sucks. Google doesn't support the PKCE flow without a client secret. Sort of
-    // defeats the original purpose of PKCE, but whatever. This is just a demo app, so nothing
-    // sensitive here. Hopefully someday they'll relax the restriction, and then I can drop this
-    // (and rotate the secret, of course).
+    // defeats the original purpose of PKCE, but whatever. Per RFC 8252 §8.4 (and Google's own
+    // docs), a client secret embedded in a native/CLI app is not actually confidential — so
+    // shipping it here leaks nothing that the architecture doesn't already assume is public.
+    // Hopefully someday they'll relax the restriction, and then I can drop this.
     let client_secret = "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".to_string();
     let auth_url = "https://accounts.google.com/o/oauth2/v2/auth".to_string();
     let token_url = "https://oauth2.googleapis.com/token".to_string();
