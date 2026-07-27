@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-26
+
+### Fixed
+- Latent XSS vulnerability in the default error response of the OAuth helper server by HTML-escaping error messages.
+
 ## [0.9.0] - 2026-06-22
 
 ### Added
@@ -86,7 +91,8 @@ Initial release.
 - CI pipeline with multi-platform builds and code coverage
 
 <!-- next-url -->
-[Unreleased]: https://github.com/riversoforion/clio-auth/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/riversoforion/clio-auth/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/riversoforion/clio-auth/compare/v0.9.0...v1.0.1
 [0.9.0]: https://github.com/riversoforion/clio-auth/compare/v0.8.0...v0.9.0
 [0.8.1]: https://github.com/riversoforion/clio-auth/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/riversoforion/clio-auth/compare/v0.7.1...v0.8.0
