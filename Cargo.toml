@@ -28,6 +28,7 @@ tokio = { version = "1.52.3", features = [
 poem = "3.1.12"
 url = "2.5.8"
 thiserror = "2.0.18"
+html-escape = "0.2.14"
 
 [dev-dependencies]
 rstest = "0.26.1"

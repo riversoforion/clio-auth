@@ -109,12 +109,14 @@ fn default_ok_response() -> impl IntoResponse {
 }
 
 async fn default_error_response(error: Error) -> impl IntoResponse {
+    let error_text = format!("{error}");
+    let escaped_error = html_escape::encode_safe(&error_text);
     let content = format!(
         r"
     <html>
         <h1 style='color: red'>Error!</h1>
         <p>There was an error authenticating. Please try again.</p>
-        <p>Details: {error}</p>
+        <p>Details: {escaped_error}</p>
     </html>
     ",
     );
@@ -280,5 +282,20 @@ mod tests {
         let content = body.into_string().await.unwrap();
         assert!(content.contains("Error!"));
         assert!(content.contains("Details: Internal server error"));
+    }
+
+    #[tokio::test]
+    async fn default_error_response_escapes_html() {
+        let xss_payload = "<script>alert('xss')</script>";
+        let error = Error::from_string(xss_payload, StatusCode::BAD_REQUEST);
+        let response = default_error_response(error).await.into_response();
+        let body = response.into_body();
+        let content = body.into_string().await.unwrap();
+
+        assert!(
+            !content.contains(xss_payload),
+            "XSS payload should be escaped"
+        );
+        assert!(content.contains("&lt;script&gt;alert(&#x27;xss&#x27;)&lt;&#x2F;script&gt;"));
     }
 }
