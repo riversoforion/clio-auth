@@ -68,7 +68,7 @@ The `CliOAuthBuilder::open_browser(bool)` option (default `true`) controls wheth
 
 ### Testing
 
-Tests use `rstest` for parameterized cases. Integration tests in `server.rs` exercise the full request/response cycle by spinning up a real server and sending HTTP requests via `reqwest`. The `mockall` crate is available for mocking.
+Tests use `rstest` for parameterized cases. Integration tests in `server.rs` exercise the full request/response cycle by spinning up a real server and sending HTTP requests via `reqwest`.
 
 Port ranges in tests: `lib.rs` tests start at 8000 via `PORT_GENERATOR`; `server.rs` tests start at 9000 via their own `PORT_GENERATOR`. If you add tests that need ports, use the `next_ports` / `next_port` helpers in the respective module to get a unique range and avoid collisions.
 

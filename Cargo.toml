@@ -16,9 +16,9 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
 [dependencies]
 log = "0.4.33"
 oauth2 = "5.0.0"
-open = "5.3.5"
-serde = "1.0.228"
-tokio = { version = "1.52.3", features = [
+open = "5.4.1"
+serde = "1.0.229"
+tokio = { version = "1.53.1", features = [
   "rt-multi-thread",
   "sync",
   "time",
@@ -27,17 +27,14 @@ tokio = { version = "1.52.3", features = [
 ] }
 poem = "3.1.12"
 url = "2.5.8"
-thiserror = "2.0.18"
-html-escape = "0.2.14"
+thiserror = "2.0.20"
+html-escape = "0.2.15"
 
 [dev-dependencies]
 rstest = "0.26.1"
-mockall = "0.14.0"
-anyhow = "1.0.102"
 pretty_env_logger = "0.5.0"
 reqwest = { version = "0.13.4", features = ["json"] }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
+serde = { version = "1.0.229", features = ["derive"] }
 
 [[example]]
 name = "auth0"
