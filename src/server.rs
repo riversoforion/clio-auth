@@ -105,7 +105,9 @@ fn default_ok_response() -> impl IntoResponse {
     </html>
     ",
     );
-    Html(content).with_status(StatusCode::OK)
+    Html(content)
+        .with_status(StatusCode::OK)
+        .with_header("Referrer-Policy", "no-referrer")
 }
 
 async fn default_error_response(error: Error) -> impl IntoResponse {
@@ -120,7 +122,9 @@ async fn default_error_response(error: Error) -> impl IntoResponse {
     </html>
     ",
     );
-    Html(content).with_status(error.status())
+    Html(content)
+        .with_status(error.status())
+        .with_header("Referrer-Policy", "no-referrer")
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -271,6 +275,14 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn default_ok_response_sets_referrer_policy() {
+        let response = default_ok_response().into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let headers = response.headers();
+        assert_eq!(headers["referrer-policy"], "no-referrer");
+    }
+
+    #[tokio::test]
     async fn default_error_response_has_error_message() {
         let error = Error::new(
             ServerError::InternalServerError(io::Error::new(ErrorKind::AddrInUse, "the problem")),
@@ -297,5 +309,17 @@ mod tests {
             "XSS payload should be escaped"
         );
         assert!(content.contains("&lt;script&gt;alert(&#x27;xss&#x27;)&lt;&#x2F;script&gt;"));
+    }
+
+    #[tokio::test]
+    async fn default_error_response_sets_referrer_policy() {
+        let error = Error::new(
+            ServerError::InternalServerError(io::Error::new(ErrorKind::AddrInUse, "the problem")),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        );
+        let response = default_error_response(error).await.into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let headers = response.headers();
+        assert_eq!(headers["referrer-policy"], "no-referrer");
     }
 }
