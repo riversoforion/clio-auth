@@ -236,8 +236,8 @@ impl CliOAuth {
 
     /// Validates the authorization code and CSRF token (`state`).
     ///
-    /// If validation is successful, then the code and PKCE verifier are returned to the caller in
-    /// order to build the [exchange code](oauth2::Client::exchange_code) request.
+    /// If validation is successful, then the code and PKCE verifier are returned to the caller
+    /// to build the [exchange code](oauth2::Client::exchange_code) request.
     ///
     /// This method *must* be called after [`CliOAuth::authorize`] completes successfully.
     pub fn validate(&mut self) -> Result<AuthContext, AuthError> {
@@ -484,6 +484,51 @@ mod tests {
                 Err(e) => panic!("CsrfMismatch error should be raised, but was {:?}", e),
                 Ok(_) => panic!("Validation should fail"),
             };
+        }
+
+        #[rstest]
+        #[tokio::test]
+        async fn authorize_success() {
+            use oauth2::basic::BasicClient;
+            use oauth2::{AuthUrl, ClientId};
+            use std::time::Duration;
+
+            let mut auth = CliOAuth::builder()
+                .port_range(18000..18001)
+                .timeout(5)
+                .open_browser(false)
+                .build()
+                .unwrap();
+            let client = BasicClient::new(ClientId::new("client".into()))
+                .set_auth_uri(AuthUrl::new("http://auth".into()).unwrap());
+
+            let addr = auth.address;
+
+            let auth_handle = tokio::spawn(async move {
+                let res = auth.authorize(&client).await;
+                (res, auth)
+            });
+
+            // Give the server a moment to start
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            let resp = reqwest::get(format!("http://{}?code=my_code&state=any_state", addr))
+                .await
+                .expect("Failed to send callback");
+            assert!(resp.status().is_success());
+
+            let (res, auth) = auth_handle.await.unwrap();
+            let auth_url = res.expect("authorize failed");
+
+            assert!(auth_url.as_str().starts_with("http://auth"));
+
+            // Verify internal state
+            let auth_context = auth.auth_context.expect("auth_context should be set");
+            assert_eq!(auth_context.auth_code.secret(), "my_code");
+
+            let auth_result = auth.auth_result.expect("auth_result should be set");
+            assert_eq!(auth_result.auth_code, "my_code");
+            assert_eq!(auth_result.state, "any_state");
         }
     }
 }
