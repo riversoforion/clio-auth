@@ -95,6 +95,7 @@
 //! [1]: https://www.rfc-editor.org/rfc/rfc7636
 //! [2]: https://crates.io/crates/oauth2
 
+use constant_time_eq::constant_time_eq;
 use std::fmt::{Debug, Formatter};
 use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::ops::Range;
@@ -246,7 +247,14 @@ impl CliOAuth {
             .ok_or(AuthError::InvalidAuthState)?
             .state;
         match self.auth_context.take() {
-            Some(auth_ctx) if auth_ctx.state.secret() == &expected_state => Ok(auth_ctx),
+            Some(auth_ctx)
+                if constant_time_eq(
+                    auth_ctx.state.secret().as_bytes(),
+                    expected_state.as_bytes(),
+                ) =>
+            {
+                Ok(auth_ctx)
+            }
             Some(_) => Err(AuthError::CsrfMismatch),
             None => Err(AuthError::InvalidAuthState),
         }
