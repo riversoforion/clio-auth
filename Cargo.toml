@@ -14,10 +14,14 @@ categories = ["authentication", "command-line-interface"]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
 
 [dependencies]
+constant_time_eq = "0.5.0"
+html-escape = "0.2.15"
 log = "0.4.33"
 oauth2 = "5.0.0"
 open = "5.4.1"
+poem = "3.1.12"
 serde = "1.0.229"
+thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = [
   "rt-multi-thread",
   "sync",
@@ -25,15 +29,12 @@ tokio = { version = "1.53.1", features = [
   "macros",
   "signal",
 ] }
-poem = "3.1.12"
 url = "2.5.8"
-thiserror = "2.0.20"
-html-escape = "0.2.15"
 
 [dev-dependencies]
-rstest = "0.26.1"
 pretty_env_logger = "0.5.0"
 reqwest = { version = "0.13.4", features = ["json"] }
+rstest = "0.26.1"
 serde = { version = "1.0.229", features = ["derive"] }
 
 [[example]]
