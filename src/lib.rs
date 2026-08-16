@@ -459,6 +459,23 @@ mod tests {
         }
 
         #[rstest]
+        fn validate_success(
+            mut auth: CliOAuth,
+            auth_result: AuthorizationResult,
+            auth_context: AuthContext,
+        ) {
+            auth.auth_result = Some(auth_result);
+            auth.auth_context = Some(auth_context);
+
+            let res = auth.validate();
+            assert!(res.is_ok());
+            let ctx = res.unwrap();
+            assert_eq!(ctx.auth_code.secret(), "code");
+            assert_eq!(ctx.state.secret(), "state");
+            assert_eq!(ctx.pkce_verifier.secret(), "pkce");
+        }
+
+        #[rstest]
         fn validate_with_no_context(mut auth: CliOAuth, auth_result: AuthorizationResult) {
             auth.auth_result = Some(auth_result);
             assert!(auth.validate().is_err());
