@@ -2,7 +2,7 @@ name: Release Please
 
 on:
   push:
-    branches: [main, fix/issue-39-release-plz]
+    branches: [main]
   workflow_dispatch: # Also allows manual triggering from Actions UI / CLI
 
 permissions:
