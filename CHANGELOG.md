@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2](https://github.com/riversoforion/clio-auth/compare/v1.0.1...v1.0.2) - 2026-08-20
+
+### Fixed
+
+- Use GitHub app for release-plz action ([#56](https://github.com/riversoforion/clio-auth/pull/56))
+- Use constant time comparison for CSRF token ([#55](https://github.com/riversoforion/clio-auth/pull/55))
+- Set Referrer-Policy header in default responses
+
+### Other
+
+- *(deps)* Upgrade dependencies and remove unused ones
+- Add AGENTS.md
+
 ## [1.0.1] - 2026-07-26
 
 ### Fixed
